@@ -133,7 +133,7 @@ target_link_libraries(image_processor_nodelet
 
 # ISAM2
 add_executable(isam2 src/isam2.cpp)
-target_link_libraries(isam2 ${catkin_LIBRARIES})
+target_link_libraries(isam2 ${catkin_LIBRARIES} gtsam)
 add_dependencies(isam2 gtsam_ros_generate_messages_cpp)
 
 #############
