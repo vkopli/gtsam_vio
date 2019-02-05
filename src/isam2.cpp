@@ -56,12 +56,27 @@ using namespace gtsam;
 NonlinearFactorGraph graph;
 Values initialEstimate;
 
+// Initialize Camera Calibration Constants
+// initialized in main from YAML file
+
 
 // FUNCTIONS
 /* ************************************************************************* */
 void callback(const CameraMeasurementConstPtr& features, const ImuConstPtr& imu) {
-  // use features to estimate feature locations in camera frame
-  // 
+  
+  // Use features u, v image coordinates to estimate feature X, Y, Z locations in camera frame
+  // maybe with openCV, maybe something already in msckf_vio  
+
+  // Create Point3 objects (feature in camera -> feature in world) 
+
+  // Create Pose3 object (estimated camera pose)  
+
+  // Add to Factor Graph
+
+  // Optimize using ISAM
+
+  // Print Results to ROS_INFO
+
 }
 
 void chatterCallback(const std_msgs::String::ConstPtr& msg) {
@@ -71,6 +86,8 @@ void chatterCallback(const std_msgs::String::ConstPtr& msg) {
 /* ************************************************************************* */
 int main(int argc, char **argv) {
 
+  // Read camera intrinsics from YAML file
+  // use rosparam load
 
   ros::init(argc, argv, "isam2_node"); // specify name of node and ROS arguments
 
