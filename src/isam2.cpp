@@ -2,15 +2,18 @@
 
 #include "ros/ros.h"
 #include "std_msgs/String.h"
+
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/CameraInfo.h>
 
-using namespace sensor_msgs;
+#include <legged_vio/CameraMeasurement.h>
+#include <sensor_msgs/Imu.h>
+
 using namespace message_filters;
+using namespace legged_vio;
+using namespace sensor_msgs;
 
-void callback(const ImageConstPtr& image, const CameraInfoConstPtr& cam_info) {
+void callback(const CameraMeasurementConstPtr& features, const ImuConstPtr& imu) {
   //
 }
 
@@ -26,9 +29,9 @@ int main(int argc, char **argv) {
 
   // Subscriber stays instantiated as long as subscribed, specify callback here
   //ros::Subscriber sub = n.subscribe("chatter", 1000, chatterCallback);
-  message_filters::Subscriber<Image> image_sub(nh, "image", 1);
-  message_filters::Subscriber<CameraInfo> info_sub(nh, "camera_info", 1);
-  TimeSynchronizer<Image, CameraInfo> sync(image_sub, info_sub, 10);
+  message_filters::Subscriber<CameraMeasurement> feature_sub(nh, "features", 1);
+  message_filters::Subscriber<Imu> imu_sub(nh, "imu", 1);
+  TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
   sync.registerCallback(boost::bind(&callback, _1, _2));
 
   // loop, pumping all callbacks (specified in subscriber object)
