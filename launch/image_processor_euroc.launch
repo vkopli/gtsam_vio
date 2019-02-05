@@ -1,6 +1,6 @@
 <launch>
 
-  <arg name="robot" default="firefly_sbx"/>
+  <arg name="robot" default="minitaur"/>
   <arg name="calibration_file"
     default="$(find legged_vio)/config/camchain-imucam-euroc.yaml"/>
 
