@@ -49,25 +49,29 @@ using namespace legged_vio;
 using namespace sensor_msgs;
 using namespace gtsam;
 
-// GLOBAL VARIABLES (eventually move these variables to Callbacks class wrapper)
+
+// CALLBACK WRAPPER CLASS
 /* ************************************************************************* */
 
-// Create a Factor Graph and Values to hold the new data, accessible from callback function
-NonlinearFactorGraph graph;
-Values initialEstimate;
-
-// Initialize Camera Calibration Constants
-
-// initialized in main from YAML file
-
-
-// CALLBACK FUNCTIONS
-/* ************************************************************************* */
-
-// class wrapper for callback functions
 class Callbacks { 
 
+private:
+  
+  // Hold node handle initialized in main
+  ros::NodeHandle nh;
+  
+  // Create a Factor Graph and Values to hold the new data, accessible from callback function
+  NonlinearFactorGraph graph;
+  Values initialEstimate;
+  
+
 public:
+  Callbacks(ros::NodeHandle& nh) : nh(nh) {
+
+    // Initialize Camera Calibration Constants from YAML file
+    // nh.getParam("cam0/resolution", cam0_resolution_temp);
+  }
+
   void callback(const CameraMeasurementConstPtr& features, const ImuConstPtr& imu) {
   
     // Use features u, v image coordinates to estimate feature X, Y, Z locations in camera frame
@@ -89,14 +93,11 @@ public:
 /* ************************************************************************* */
 int main(int argc, char **argv) {
 
-  // Read camera intrinsics from YAML file
-  // use rosparam load
-
   ros::init(argc, argv, "isam2_node"); // specify name of node and ROS arguments
   ros::NodeHandle nh;
 
   // Instantiate class containing callbacks and necessary variables
-  Callbacks callbacks_obj;
+  Callbacks callbacks_obj(nh);
 
   // Subscribe to "features" and "imu" topics simultaneously
   message_filters::Subscriber<CameraMeasurement> feature_sub(nh, "features", 1);
