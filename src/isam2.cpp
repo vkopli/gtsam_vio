@@ -79,8 +79,6 @@ public:
 
   Callbacks(shared_ptr<ros::NodeHandle> const& nh_inputted) {
 
-    ROS_INFO("isam2 node is working");
-
     nh = nh_inputted;
 
     // Initialize camera calibration matrix using YAML file
@@ -104,6 +102,8 @@ public:
 
   void callback(const CameraMeasurementConstPtr& features, const ImuConstPtr& imu) {
   
+    ROS_INFO("isam2 node: features and imu");
+
     // Use features u, v image coordinates to estimate feature X, Y, Z locations in camera frame
     // maybe with openCV, maybe something already in msckf_vio  
 
