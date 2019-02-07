@@ -79,6 +79,8 @@ public:
 
   Callbacks(shared_ptr<ros::NodeHandle> const& nh_inputted) {
 
+    ROS_INFO("isam2 node is working");
+
     nh = nh_inputted;
 
     // Initialize camera calibration matrix using YAML file
@@ -122,15 +124,15 @@ public:
 /* ************************************************************************* */
 int main(int argc, char **argv) {
 
-  ros::init(argc, argv, "isam2_node"); // specify name of node and ROS arguments
+  ros::init(argc, argv, "isam2"); // specify name of node and ROS arguments
   shared_ptr<ros::NodeHandle> nh = make_shared<ros::NodeHandle>();
 
   // Instantiate class containing callbacks and necessary variables
   Callbacks callbacks_obj(nh);
 
   // Subscribe to "features" and "imu" topics simultaneously
-  message_filters::Subscriber<CameraMeasurement> feature_sub(*nh, "features", 1);
-  message_filters::Subscriber<Imu> imu_sub(*nh, "imu", 1);
+  message_filters::Subscriber<CameraMeasurement> feature_sub(*nh, "/minitaur/image_processor/features", 1);
+  message_filters::Subscriber<Imu> imu_sub(*nh, "/imu0", 1);
   TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
