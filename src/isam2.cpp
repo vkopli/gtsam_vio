@@ -43,6 +43,7 @@
 /* ************************************************************************* */
 
 #include <vector>
+#include <memory>
 
 using namespace std;
 using namespace message_filters;
@@ -65,20 +66,36 @@ private:
   NonlinearFactorGraph graph;
   Values initialEstimate;  
 
-  // camera calibration (intrinsic) matrix
+  // Camera calibration (intrinsic) matrix
   Cal3_S2::shared_ptr K;
 
+  // --> Camera observation noise model (has to do with IMU?)
+  noiseModel::Isotropic::shared_ptr measurementNoise = noiseModel::Isotropic::Sigma(2, 1.0); // one pixel in u and v
+
+  // --> Create iSAM2 object
+  unique_ptr<ISAM2> isam;
+
 public:
+
   Callbacks(ros::NodeHandle& nh) : nh(nh) {
 
     // Initialize camera calibration matrix using YAML file
     vector<int> cam0_intrinsics(4);
     vector<int> cam1_intrinsics(4);
-    nh.getParam("cam0/intrinsics", cam0_intrinsics); // YAML intrinsics (pinhole): [fu fv pu pv]
+    // YAML intrinsics (pinhole): [fu fv pu pv]
+    nh.getParam("cam0/intrinsics", cam0_intrinsics); 
     nh.getParam("cam1/intrinsics", cam1_intrinsics);
+    // GTSAM Cal3_S2 (doubles): (fx, fy, s, u0, v0)
     Cal3_S2::shared_ptr K(new Cal3_S2(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
-	cam0_intrinsics[2], cam0_intrinsics[3])); // gtsam Cal3_S2 (doubles): (fx, fy, s, u0, v0)
+                                      cam0_intrinsics[2], cam0_intrinsics[3])); 
     
+    // iSAM2 performs partial relinearization/variable reordering at each step A parameter
+    // parameter structure allows setting of properties: relinearization threshold & type of linear solver
+    // this example: set the relinearization threshold small so the iSAM2 result will approach the batch result.
+    ISAM2Params parameters;
+    parameters.relinearizeThreshold = 0.01;
+    parameters.relinearizeSkip = 1;
+    isam.reset(new ISAM2(parameters));
   }
 
   void callback(const CameraMeasurementConstPtr& features, const ImuConstPtr& imu) {
@@ -99,6 +116,7 @@ public:
 
 };
 
+// MAIN
 /* ************************************************************************* */
 int main(int argc, char **argv) {
 
