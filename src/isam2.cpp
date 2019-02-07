@@ -44,6 +44,7 @@
 
 #include <vector>
 
+using namespace std;
 using namespace message_filters;
 using namespace legged_vio;
 using namespace sensor_msgs;
@@ -62,14 +63,22 @@ private:
   
   // Create a Factor Graph and Values to hold the new data, accessible from callback function
   NonlinearFactorGraph graph;
-  Values initialEstimate;
-  
+  Values initialEstimate;  
+
+  // camera calibration (intrinsic) matrix
+  Cal3_S2::shared_ptr K;
 
 public:
   Callbacks(ros::NodeHandle& nh) : nh(nh) {
 
-    // Initialize Camera Calibration Constants from YAML file
-    // nh.getParam("cam0/resolution", cam0_resolution_temp);
+    // Initialize camera calibration matrix using YAML file
+    vector<int> cam0_intrinsics(4);
+    vector<int> cam1_intrinsics(4);
+    nh.getParam("cam0/intrinsics", cam0_intrinsics); // YAML intrinsics (pinhole): [fu fv pu pv]
+    nh.getParam("cam1/intrinsics", cam1_intrinsics);
+    Cal3_S2::shared_ptr K(new Cal3_S2(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
+	cam0_intrinsics[2], cam0_intrinsics[3])); // gtsam Cal3_S2 (doubles): (fx, fy, s, u0, v0)
+    
   }
 
   void callback(const CameraMeasurementConstPtr& features, const ImuConstPtr& imu) {
@@ -105,7 +114,7 @@ int main(int argc, char **argv) {
   TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
-  // loop, pumping all callbacks (specified in subscriber object)
+  // Loop, pumping all callbacks (specified in subscriber object)
   ros::spin(); 
 
   return 0;
