@@ -27,7 +27,7 @@
 // include iSAM2 here
 #include <gtsam/nonlinear/ISAM2.h>
 
-// iSAM2 requires as input a set set of new factors to be added stored in a factor graph,
+// iSAM2 requires as input a set of new factors to be added stored in a factor graph,
 // and initial guesses for any new variables used in the added factors
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
@@ -49,7 +49,7 @@ using namespace legged_vio;
 using namespace sensor_msgs;
 using namespace gtsam;
 
-// GLOBAL VARIABLES
+// GLOBAL VARIABLES (eventually move these variables to Callbacks class wrapper)
 /* ************************************************************************* */
 
 // Create a Factor Graph and Values to hold the new data, accessible from callback function
@@ -57,31 +57,34 @@ NonlinearFactorGraph graph;
 Values initialEstimate;
 
 // Initialize Camera Calibration Constants
+
 // initialized in main from YAML file
 
 
-// FUNCTIONS
+// CALLBACK FUNCTIONS
 /* ************************************************************************* */
-void callback(const CameraMeasurementConstPtr& features, const ImuConstPtr& imu) {
+
+// class wrapper for callback functions
+class Callbacks { 
+
+public:
+  void callback(const CameraMeasurementConstPtr& features, const ImuConstPtr& imu) {
   
-  // Use features u, v image coordinates to estimate feature X, Y, Z locations in camera frame
-  // maybe with openCV, maybe something already in msckf_vio  
+    // Use features u, v image coordinates to estimate feature X, Y, Z locations in camera frame
+    // maybe with openCV, maybe something already in msckf_vio  
 
-  // Create Point3 objects (feature in camera -> feature in world) 
+    // Create Point3 objects (feature in camera -> feature in world) 
 
-  // Create Pose3 object (estimated camera pose)  
+    // Create Pose3 object (estimated camera pose)  
 
-  // Add to Factor Graph
+    // Add to Factor Graph
 
-  // Optimize using ISAM
+    // Optimize using ISAM
 
-  // Print Results to ROS_INFO
+    // Print Results to ROS_INFO
+  }
 
-}
-
-void chatterCallback(const std_msgs::String::ConstPtr& msg) {
-  //ROS_INFO("I heard: [%s]", msg->data.c_str());
-}
+};
 
 /* ************************************************************************* */
 int main(int argc, char **argv) {
@@ -90,15 +93,16 @@ int main(int argc, char **argv) {
   // use rosparam load
 
   ros::init(argc, argv, "isam2_node"); // specify name of node and ROS arguments
-
   ros::NodeHandle nh;
 
-  // Subscriber stays instantiated as long as subscribed, specify callback here
-  //ros::Subscriber sub = n.subscribe("chatter", 1000, chatterCallback);
+  // Instantiate class containing callbacks and necessary variables
+  Callbacks callbacks_obj;
+
+  // Subscribe to "features" and "imu" topics simultaneously
   message_filters::Subscriber<CameraMeasurement> feature_sub(nh, "features", 1);
   message_filters::Subscriber<Imu> imu_sub(nh, "imu", 1);
   TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
-  sync.registerCallback(boost::bind(&callback, _1, _2));
+  sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
   // loop, pumping all callbacks (specified in subscriber object)
   ros::spin(); 
