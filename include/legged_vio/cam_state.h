@@ -5,8 +5,8 @@
  * All rights reserved.
  */
 
-#ifndef MSCKF_VIO_CAM_STATE_H
-#define MSCKF_VIO_CAM_STATE_H
+#ifndef LEGGED_VIO_FEATURE_H
+#define LEGGED_VIO_FEATURE_H
 
 #include <map>
 #include <vector>
@@ -14,7 +14,7 @@
 
 #include "imu_state.h"
 
-namespace msckf_vio {
+namespace legged_vio {
 /*
  * @brief CAMState Stored camera state in order to
  *    form measurement model.

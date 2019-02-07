@@ -60,11 +60,14 @@ class Callbacks {
 private:
   
   // Hold node handle initialized in main
-  ros::NodeHandle nh;
+  shared_ptr<ros::NodeHandle> nh;
   
   // Create a Factor Graph and Values to hold the new data, accessible from callback function
   NonlinearFactorGraph graph;
   Values initialEstimate;  
+
+  // --> Create iSAM2 object
+  unique_ptr<ISAM2> isam;
 
   // Camera calibration (intrinsic) matrix
   Cal3_S2::shared_ptr K;
@@ -72,19 +75,18 @@ private:
   // --> Camera observation noise model (has to do with IMU?)
   noiseModel::Isotropic::shared_ptr measurementNoise = noiseModel::Isotropic::Sigma(2, 1.0); // one pixel in u and v
 
-  // --> Create iSAM2 object
-  unique_ptr<ISAM2> isam;
-
 public:
 
-  Callbacks(ros::NodeHandle& nh) : nh(nh) {
+  Callbacks(shared_ptr<ros::NodeHandle> const& nh_inputted) {
+
+    nh = nh_inputted;
 
     // Initialize camera calibration matrix using YAML file
     vector<int> cam0_intrinsics(4);
     vector<int> cam1_intrinsics(4);
     // YAML intrinsics (pinhole): [fu fv pu pv]
-    nh.getParam("cam0/intrinsics", cam0_intrinsics); 
-    nh.getParam("cam1/intrinsics", cam1_intrinsics);
+    nh->getParam("cam0/intrinsics", cam0_intrinsics); 
+    nh->getParam("cam1/intrinsics", cam1_intrinsics);
     // GTSAM Cal3_S2 (doubles): (fx, fy, s, u0, v0)
     Cal3_S2::shared_ptr K(new Cal3_S2(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
                                       cam0_intrinsics[2], cam0_intrinsics[3])); 
@@ -121,14 +123,14 @@ public:
 int main(int argc, char **argv) {
 
   ros::init(argc, argv, "isam2_node"); // specify name of node and ROS arguments
-  ros::NodeHandle nh;
+  shared_ptr<ros::NodeHandle> nh = make_shared<ros::NodeHandle>();
 
   // Instantiate class containing callbacks and necessary variables
   Callbacks callbacks_obj(nh);
 
   // Subscribe to "features" and "imu" topics simultaneously
-  message_filters::Subscriber<CameraMeasurement> feature_sub(nh, "features", 1);
-  message_filters::Subscriber<Imu> imu_sub(nh, "imu", 1);
+  message_filters::Subscriber<CameraMeasurement> feature_sub(*nh, "features", 1);
+  message_filters::Subscriber<Imu> imu_sub(*nh, "imu", 1);
   TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
