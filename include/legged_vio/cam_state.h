@@ -5,8 +5,8 @@
  * All rights reserved.
  */
 
-#ifndef LEGGED_VIO_FEATURE_H
-#define LEGGED_VIO_FEATURE_H
+#ifndef LEGGED_VIO_CAM_STATE_H
+#define LEGGED_VIO_CAM_STATE_H
 
 #include <map>
 #include <vector>
@@ -62,6 +62,6 @@ struct CAMState {
 typedef std::map<StateIDType, CAMState, std::less<int>,
         Eigen::aligned_allocator<
         std::pair<const StateIDType, CAMState> > > CamStateServer;
-} // namespace msckf_vio
+} // namespace legged_vio
 
-#endif // MSCKF_VIO_CAM_STATE_H
+#endif // LEGGED_VIO_CAM_STATE_H
