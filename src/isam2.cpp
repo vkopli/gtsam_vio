@@ -100,9 +100,16 @@ public:
     isam.reset(new ISAM2(parameters));
   }
 
-  void callback(const CameraMeasurementConstPtr& features, const ImuConstPtr& imu) {
+  void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
   
-    ROS_INFO("isam2 node: features and imu");
+    vector<FeatureMeasurement> features = camera_msg->features;  
+   
+    //ROS_INFO("isam2 node: features and imu");
+    //ROS_INFO("IMU header: [%s]", imu_msg->header.frame_id);
+    //std_msgs::Header header = camera_msg->header;
+    //geometry_msgs::Quaternion ori = imu_msg->orientation;
+
+    //ROS_INFO("Camera Coor: [id = %d, u = %f, v = %f]", features[0].id, features[0].u0, features[0].v0);
 
     // Use features u, v image coordinates to estimate feature X, Y, Z locations in camera frame
     // maybe with openCV, maybe something already in msckf_vio  
