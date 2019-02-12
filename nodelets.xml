@@ -1,3 +1,13 @@
+<library path="lib/liblegged_vio_nodelet">
+  <class name="legged_vio/LeggedVioNodelet"
+         type="legged_vio::LeggedVioNodelet"
+         base_class_type="nodelet::Nodelet">
+    <description>
+      Perform SLAM by integrating information from ImageProcessorNodelet with IMU.
+    </description>
+  </class>
+</library>
+
 <library path="lib/libimage_processor_nodelet">
   <class name="legged_vio/ImageProcessorNodelet"
          type="legged_vio::ImageProcessorNodelet"
