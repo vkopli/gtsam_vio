@@ -60,7 +60,7 @@ class Callbacks {
 private:
   
   // Hold node handle initialized in main
-  shared_ptr<ros::NodeHandle> nh;
+  shared_ptr<ros::NodeHandle> nh_ptr;
   
   // Create a Factor Graph and Values to hold the new data, accessible from callback function
   NonlinearFactorGraph graph;
@@ -69,27 +69,36 @@ private:
   // --> Create iSAM2 object
   unique_ptr<ISAM2> isam;
 
-  // Camera calibration (intrinsic) matrix
+  // Camera calibration intrinsic matrix
   Cal3_S2::shared_ptr K;
+
+  // Camera calibration extrinsic
+  double Tx; // distance from cam0 to cam1
 
   // --> Camera observation noise model (has to do with IMU?)
   noiseModel::Isotropic::shared_ptr measurementNoise = noiseModel::Isotropic::Sigma(2, 1.0); // one pixel in u and v
 
 public:
-
-  Callbacks(shared_ptr<ros::NodeHandle> const& nh_inputted) {
-
-    nh = nh_inputted;
+ 
+  Callbacks(shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(move(nh_ptr_copy)) {
 
     // Initialize camera calibration matrix using YAML file
     vector<int> cam0_intrinsics(4);
     vector<int> cam1_intrinsics(4);
     // YAML intrinsics (pinhole): [fu fv pu pv]
-    nh->getParam("cam0/intrinsics", cam0_intrinsics); 
-    nh->getParam("cam1/intrinsics", cam1_intrinsics);
+    nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); 
+    nh_ptr->getParam("cam1/intrinsics", cam1_intrinsics);
     // GTSAM Cal3_S2 (doubles): (fx, fy, s, u0, v0)
     Cal3_S2::shared_ptr K(new Cal3_S2(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
                                       cam0_intrinsics[2], cam0_intrinsics[3])); 
+		// Stereo Camera Extrinsic (distance between 2 cameras)
+		vector<double> T_cam1(16);
+		nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
+		Tx = T_cam1[3];
+
+		ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
+		ROS_INFO("intrinsics: %d, %d, %d, %d", cam0_intrinsics[0], cam0_intrinsics[1], cam0_intrinsics[2], cam0_intrinsics[3]);
+    ROS_INFO("Tx: %f, %f, %f, %f", T_cam1[0], T_cam1[1], T_cam1[2], T_cam1[3]);
     
     // iSAM2 performs partial relinearization/variable reordering at each step A parameter
     // parameter structure allows setting of properties: relinearization threshold & type of linear solver
@@ -102,14 +111,22 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
   
-    vector<FeatureMeasurement> features = camera_msg->features;  
+    vector<FeatureMeasurement> feature_vector = camera_msg->features;  
    
-    //ROS_INFO("isam2 node: features and imu");
-    //ROS_INFO("IMU header: [%s]", imu_msg->header.frame_id);
-    //std_msgs::Header header = camera_msg->header;
-    //geometry_msgs::Quaternion ori = imu_msg->orientation;
+    ROS_INFO("%lu total features", feature_vector.size());
+		ROS_INFO("Tx: %f", Tx);
 
-    //ROS_INFO("Camera Coor: [id = %d, u = %f, v = %f]", features[0].id, features[0].u0, features[0].v0);
+    for (int i = 0; i < feature_vector.size(); i++) {
+
+			//double d = feature_vector[i].u1 - feature_vector[i].u0; // distance from cam0 to cam1 in pixels
+      //double denom = -d / Tx; 
+			//X = 
+
+			Point2 measurement(feature_vector[i].u0, feature_vector[i].v0);
+
+			// graph.emplace_shared<GenericProjectionFactor<Pose3, Point3, Cal3_S2> >(measurement, measurementNoise, Symbol('x', i), Symbol('l', j), K);
+				
+		}
 
     // Use features u, v image coordinates to estimate feature X, Y, Z locations in camera frame
     // maybe with openCV, maybe something already in msckf_vio  
@@ -125,6 +142,13 @@ public:
     // Print Results to ROS_INFO
   }
 
+// potential ROS messages
+//ROS_INFO("IMU header: [%s]", imu_msg->header.frame_id);
+//std_msgs::Header header = camera_msg->header;
+//geometry_msgs::Quaternion ori = imu_msg->orientation;
+//ROS_INFO("Camera Coor: [id = %d, u = %f, v = %f]", features[0].id, features[0].u0, features[0].v0);
+
+
 };
 
 // MAIN
@@ -132,14 +156,14 @@ public:
 int main(int argc, char **argv) {
 
   ros::init(argc, argv, "isam2"); // specify name of node and ROS arguments
-  shared_ptr<ros::NodeHandle> nh = make_shared<ros::NodeHandle>();
+  shared_ptr<ros::NodeHandle> nh_ptr = make_shared<ros::NodeHandle>();
 
   // Instantiate class containing callbacks and necessary variables
-  Callbacks callbacks_obj(nh);
+  Callbacks callbacks_obj(nh_ptr);
 
   // Subscribe to "features" and "imu" topics simultaneously
-  message_filters::Subscriber<CameraMeasurement> feature_sub(*nh, "/minitaur/image_processor/features", 1);
-  message_filters::Subscriber<Imu> imu_sub(*nh, "/imu0", 1);
+  message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, "/minitaur/image_processor/features", 1);
+  message_filters::Subscriber<Imu> imu_sub(*nh_ptr, "/imu0", 1);
   TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
