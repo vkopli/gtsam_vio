@@ -82,7 +82,7 @@ generate_messages(
 ###################################
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES image_processor #legged_vio
+  LIBRARIES image_processor
   CATKIN_DEPENDS
     roscpp std_msgs tf nav_msgs sensor_msgs geometry_msgs
     eigen_conversions tf_conversions random_numbers message_runtime
@@ -131,44 +131,17 @@ target_link_libraries(image_processor_nodelet
   ${catkin_LIBRARIES}
 )
 
-## Legged VIO
-#add_library(legged_vio
-#  src/legged_vio.cpp
-#  src/utils.cpp
-#)
-#add_dependencies(legged_vio
-#  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-#  ${catkin_EXPORTED_TARGETS}
-#)
-#target_link_libraries(legged_vio
-#  ${catkin_LIBRARIES}
-#  ${SUITESPARSE_LIBRARIES}
-#)
-#
-## Legged VIO nodelet
-#add_library(legged_vio_nodelet
-#  src/legged_vio_nodelet.cpp
-#)
-#add_dependencies(legged_vio_nodelet
-#  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-#  ${catkin_EXPORTED_TARGETS}
-#)
-#target_link_libraries(legged_vio_nodelet
-#  legged_vio
-#  ${catkin_LIBRARIES}
-#)
-
 # ISAM2 regular node
 add_executable(isam2 src/isam2.cpp)
 target_link_libraries(isam2 ${catkin_LIBRARIES} gtsam)
-add_dependencies(isam2 gtsam_ros_generate_messages_cpp)
+add_dependencies(isam2 legged_vio_generate_messages_cpp)
 
 #############
 ## Install ##
 #############
 
 install(TARGETS
-  image_processor image_processor_nodelet #legged_vio legged_vio_nodelet
+  image_processor image_processor_nodelet
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
