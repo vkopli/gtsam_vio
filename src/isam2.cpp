@@ -128,6 +128,10 @@ public:
 
     for (int i = 0; i < feature_vector.size(); i++) {
 
+			 // initial estimate for pose
+			initial_estimate.insert(Symbol('x', frame), Pose3());
+
+			// initial estimate for landmarks
 			processFeature(feature_vector[i]);
 
 			if (frame == 0) {
@@ -164,6 +168,7 @@ public:
   }
 
 	void processFeature(FeatureMeasurement feature) {
+
 			// identify feature (may appear in previous/future frames)
 			int l = feature.id; 
 
