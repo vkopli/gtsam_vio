@@ -4,12 +4,15 @@
   <arg name="calibration_file"
     default="$(find legged_vio)/config/camchain-imucam-euroc.yaml"/>
 
+  <rosparam command="load" file="$(arg calibration_file)"/>
+
   <!-- Image Processor Nodelet  -->
   <group ns="$(arg robot)">
+    
     <node pkg="nodelet" type="nodelet" name="image_processor"
       args="standalone legged_vio/ImageProcessorNodelet"
       output="screen">
-
+      
       <rosparam command="load" file="$(arg calibration_file)"/>
       <param name="grid_row" value="4"/>
       <param name="grid_col" value="5"/>
@@ -23,6 +26,8 @@
       <param name="ransac_threshold" value="3"/>
       <param name="stereo_threshold" value="5"/>
 
+      <!-- This nodelet subscribes to imu, cam0_image, and cam1_image topics -->
+      <!-- Remap to the topics that are published by stereo camera: /imu0/, /cam0/image_raw, etc -->
       <remap from="~imu" to="/imu0"/>
       <remap from="~cam0_image" to="/cam0/image_raw"/>
       <remap from="~cam1_image" to="/cam1/image_raw"/>
