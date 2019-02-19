@@ -11,6 +11,9 @@
 
 #include <legged_vio/CameraMeasurement.h>
 #include <sensor_msgs/Imu.h>
+#include <sensor_msgs/PointCloud.h>
+#include <geometry_msgs/Point32.h>
+#include <std_msgs/Float32.h>
 
 // ISAM2 INCLUDES
 /* ************************************************************************* */
@@ -84,9 +87,15 @@ private:
   noiseModel::Isotropic::shared_ptr noise_model = 
 			noiseModel::Isotropic::Sigma(2, 1.0); // one pixel in u and v
 
+	// Publish PointCloud messages
+	ros::Publisher cloud_pub; 
+
 public:
  
   Callbacks(shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(move(nh_ptr_copy)) {
+
+		// initialize PointCloud publisher
+		nh_ptr->advertise<sensor_msgs::PointCloud>("cloud", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
     vector<int> cam0_intrinsics(4);
@@ -122,80 +131,102 @@ public:
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
-  
+
+		// retrieved subscribed features from FeatureMeasurement
     vector<FeatureMeasurement> feature_vector = camera_msg->features;  
     ROS_INFO("%lu total features", feature_vector.size());
+	  
+		// create vector for published points in PointCloud message
+		vector<geometry_msgs::Point32> frame_points(feature_vector.size());
 
     for (int i = 0; i < feature_vector.size(); i++) {
 
 			 // initial estimate for pose
-			initial_estimate.insert(Symbol('x', frame), Pose3());
+//			initial_estimate.insert(Symbol('x', frame), Pose3());
 
 			// initial estimate for landmarks
-			processFeature(feature_vector[i]);
+			geometry_msgs::Point32 point = processFeature(feature_vector[i]);
+			
+			// add landmark estimate to PointCloud
+			frame_points[i] = point; 
 
 			if (frame == 0) {
 
-      	// Add a prior on pose x0
-				// 30cm std on x,y,z 0.1 rad on roll,pitch,yaw
-      	noiseModel::Diagonal::shared_ptr poseNoise = noiseModel::Diagonal::Sigmas((Vector(6) << 				Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); 
-      	graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), poseNoise);
+//      	// Add a prior on pose x0
+//				// 30cm std on x,y,z 0.1 rad on roll,pitch,yaw
+//      	noiseModel::Diagonal::shared_ptr poseNoise = noiseModel::Diagonal::Sigmas((Vector(6) << 				Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); 
+//      	graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), poseNoise);
 
       	// Should add prior on landmark l0?
 
 			} else {
 
-				// Update iSAM with the new factors
-      	isam->update(graph, initial_estimate);
+//				// Update iSAM with the new factors
+//      	isam->update(graph, initial_estimate);
 
-      	// Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
-      	// If accuracy is desired at the expense of time, update(*) can be called additional times
-      	// to perform multiple optimizer iterations every step.
-      	isam->update();
+//      	// Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
+//      	// If accuracy is desired at the expense of time, update(*) can be called additional times
+//      	// to perform multiple optimizer iterations every step.
+//      	isam->update();
 
-				// estimate for current frame
-      	Values current_estimate = isam->calculateEstimate();
-        // Print Results to ROS_INFO
+//				// estimate for current frame
+//      	Values current_estimate = isam->calculateEstimate();
+//        // Print Results to ROS_INFO
 
-      	// Clear the factor graph and values for the next iteration
-      	graph.resize(0);
-      	initial_estimate.clear();
+//      	// Clear the factor graph and values for the next iteration
+//      	graph.resize(0);
+//      	initial_estimate.clear();
 			}
 
-			frame++;
 		}
 
+		// publish PointCloud messages
+		sensor_msgs::PointCloud cloud;
+		cloud.header.stamp = ros::Time::now();
+  	cloud.header.frame_id = to_string(frame);
+		cloud.points = frame_points; // Point32 vector of points
+//		cloud.channels = // optional: ChannelFloat32 vector of channels
+		cloud_pub.publish(cloud); 
+
+		frame++;
   }
 
-	void processFeature(FeatureMeasurement feature) {
+	geometry_msgs::Point32 processFeature(FeatureMeasurement feature) {
 
-			// identify feature (may appear in previous/future frames)
-			int l = feature.id; 
+		// identify feature (may appear in previous/future frames)
+		int l = feature.id; 
 
-			double uL = feature.u0;
-			double uR = feature.u1;
-			double v = (feature.v0 + feature.v1) / 2;
+		double uL = feature.u0;
+		double uR = feature.u1;
+		double v = (feature.v0 + feature.v1) / 2;
 
-			double d = uR - uL;
-			double x = uL;
-			double y = v;
-      double W = -d / Tx;
+		double d = uR - uL;
+		double x = uL;
+		double y = v;
+    double W = -d / Tx;
 
-			// estimated feature location in camera frame
-			double X = (x - cx) / W;
-			double Y = (y - cy) / W;
-			double Z = f / W;
-			
-    	graph.emplace_shared<
-      	  GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
-						noise_model, Symbol('x', frame), Symbol('l', l), K);
+		// estimated feature location in camera frame
+		double X = (x - cx) / W;
+		double Y = (y - cy) / W;
+		double Z = f / W;
+		
+//  	graph.emplace_shared<
+//  	  GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
+//				noise_model, Symbol('x', frame), Symbol('l', l), K);
 
-			// add initial estimate of landmark if it hasn't appeared yet
-	    if (!initial_estimate.exists(Symbol('l', l))) {
-      		Pose3 camPose = initial_estimate.at<Pose3>(Symbol('x', frame));
-      		Point3 worldPoint = camPose.transform_from(Point3(X, Y, Z)); 
-      		initial_estimate.insert(Symbol('l', l), worldPoint);
-    	}	
+//		// add initial estimate of landmark if it hasn't appeared yet
+//    if (!initial_estimate.exists(Symbol('l', l))) {
+//  		Pose3 camPose = initial_estimate.at<Pose3>(Symbol('x', frame));
+//  		Point3 worldPoint = camPose.transform_from(Point3(X, Y, Z)); 
+//  		initial_estimate.insert(Symbol('l', l), worldPoint);
+//    }
+
+		// return point corresponding to estimated location
+		geometry_msgs::Point32 point;
+		point.x = X;
+		point.y = Y;
+		point.z = Z; 
+		return point;
 	}
 
 };
