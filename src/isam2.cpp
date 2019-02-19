@@ -45,6 +45,7 @@
 
 #include <vector>
 #include <memory>
+#include <map>
 
 using namespace std;
 using namespace message_filters;
@@ -62,30 +63,29 @@ private:
   
 	int frame = 0;
 
-  // Hold node handle initialized in main
-  shared_ptr<ros::NodeHandle> nh_ptr;
+  	// Hold node handle initialized in main
+  	shared_ptr<ros::NodeHandle> nh_ptr;
   
-  // Create a Factor Graph and Values to hold the new data
-  NonlinearFactorGraph graph;
-  Values initial_estimate; // initial estimates of feature locations (factors)
+  	// Create a Factor Graph and Values to hold the new data
+  	NonlinearFactorGraph graph;
+  	Values initial_estimate; // initial estimates of feature locations (factors)
 
-  // --> Create iSAM2 object
-  unique_ptr<ISAM2> isam;
+  	// --> Create iSAM2 object
+  	unique_ptr<ISAM2> isam;
 
 	// Camera calibration intrinsics
 	double f;
 	double cx;
 	double cy;
 
-  // Camera calibration intrinsic matrix
-  Cal3_S2Stereo::shared_ptr K;
+  	// Camera calibration intrinsic matrix
+  	Cal3_S2Stereo::shared_ptr K;
 
-  // Camera calibration extrinsic
-  double Tx; // distance from cam0 to cam1
+  	// Camera calibration extrinsic
+  	double Tx; // distance from cam0 to cam1
 
-  // --> Camera observation noise model (has to do with IMU?)
-  noiseModel::Isotropic::shared_ptr noise_model = 
-			noiseModel::Isotropic::Sigma(2, 1.0); // one pixel in u and v
+  	// --> Camera observation noise model (has to do with IMU?)
+  	noiseModel::Isotropic::shared_ptr noise_model = noiseModel::Isotropic::Sigma(2, 1.0); // one pixel in u and v
 
 	// Publish PointCloud messages
 	ros::Publisher cloud_pub; 
@@ -95,51 +95,50 @@ public:
   Callbacks(shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(move(nh_ptr_copy)) {
 
 		// initialize PointCloud publisher
-		nh_ptr->advertise<sensor_msgs::PointCloud>("cloud", 1000);
+		this->cloud_pub = nh_ptr->advertise<sensor_msgs::PointCloud>("cloud", 1000);
 
-    // YAML intrinsics (pinhole): [fu fv pu pv]
-    vector<int> cam0_intrinsics(4);
-    vector<int> cam1_intrinsics(4);
-    nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); 
-    nh_ptr->getParam("cam1/intrinsics", cam1_intrinsics);
+    	// YAML intrinsics (pinhole): [fu fv pu pv]
+    	vector<int> cam0_intrinsics(4);
+    	vector<int> cam1_intrinsics(4);
+    	nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); 
+    	nh_ptr->getParam("cam1/intrinsics", cam1_intrinsics);
 		this->f = (cam0_intrinsics[0] + cam0_intrinsics[1]) / 2;
 		// neglecting image center of right camera...
 		this->cx = cam0_intrinsics[2];
 		this->cy = cam0_intrinsics[3];
 		
-    // K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative)
-		Cal3_S2Stereo::shared_ptr K(new Cal3_S2Stereo(cam0_intrinsics[0], 
-			cam0_intrinsics[1], 0.0, cx, cy, -Tx)); 
+    	// K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative)
+		Cal3_S2Stereo::shared_ptr K(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, cx, cy, -Tx)); 
 		
-    // YAML extrinsics (distance between 2 cameras)
+    	// YAML extrinsics (distance between 2 cameras)
 		vector<double> T_cam1(16);
 		nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
 		this->Tx = T_cam1[3];
+		ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1")); 
     
-    // iSAM2 settings
-    ISAM2Params parameters;
-    parameters.relinearizeThreshold = 0.01;
-    parameters.relinearizeSkip = 1;
-    isam.reset(new ISAM2(parameters));
+    	// iSAM2 settings
+    	ISAM2Params parameters;
+    	parameters.relinearizeThreshold = 0.01;
+    	parameters.relinearizeSkip = 1;
+    	isam.reset(new ISAM2(parameters));
 
 		// print to confirm reading the YAML file correctly
 		ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
-		ROS_INFO("intrinsics: %d, %d, %d, %d", cam0_intrinsics[0], 
-							cam0_intrinsics[1], cam0_intrinsics[2], cam0_intrinsics[3]);
-    ROS_INFO("Tx: %f", Tx);
+		ROS_INFO("intrinsics: %d, %d, %d, %d", cam0_intrinsics[0], cam0_intrinsics[1], cam0_intrinsics[2], cam0_intrinsics[3]);
+    	ROS_INFO("Tx: %f", Tx);
 
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
 		// retrieved subscribed features from FeatureMeasurement
-    vector<FeatureMeasurement> feature_vector = camera_msg->features;  
-    ROS_INFO("%lu total features", feature_vector.size());
+    	vector<FeatureMeasurement> feature_vector = camera_msg->features;  
+    	ROS_INFO("%lu total features", feature_vector.size());
 	  
 		// create vector for published points in PointCloud message
 		vector<geometry_msgs::Point32> frame_points(feature_vector.size());
 
-    for (int i = 0; i < feature_vector.size(); i++) {
+    	for (int i = 0; i < feature_vector.size(); i++) {
 
 			 // initial estimate for pose
 //			initial_estimate.insert(Symbol('x', frame), Pose3());
@@ -182,11 +181,11 @@ public:
 
 		// publish PointCloud messages
 		sensor_msgs::PointCloud cloud;
-		cloud.header.stamp = ros::Time::now();
-  	cloud.header.frame_id = to_string(frame);
+		cloud.header = camera_msg->header;
+		cloud.header.frame_id = "map";
 		cloud.points = frame_points; // Point32 vector of points
 //		cloud.channels = // optional: ChannelFloat32 vector of channels
-		cloud_pub.publish(cloud); 
+		this->cloud_pub.publish(cloud); 
 
 		frame++;
   }
@@ -203,7 +202,7 @@ public:
 		double d = uR - uL;
 		double x = uL;
 		double y = v;
-    double W = -d / Tx;
+    	double W = -d / Tx;
 
 		// estimated feature location in camera frame
 		double X = (x - cx) / W;
@@ -235,22 +234,22 @@ public:
 /* ************************************************************************* */
 int main(int argc, char **argv) {
 
-  ros::init(argc, argv, "isam2"); // specify name of node and ROS arguments
-  shared_ptr<ros::NodeHandle> nh_ptr = make_shared<ros::NodeHandle>();
+  	ros::init(argc, argv, "isam2"); // specify name of node and ROS arguments
+  	shared_ptr<ros::NodeHandle> nh_ptr = make_shared<ros::NodeHandle>();
 
-  // Instantiate class containing callbacks and necessary variables
-  Callbacks callbacks_obj(nh_ptr);
+  	// Instantiate class containing callbacks and necessary variables
+  	Callbacks callbacks_obj(nh_ptr);
 
-  // Subscribe to "features" and "imu" topics simultaneously
-  message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, "/minitaur/image_processor/features", 1);
-  message_filters::Subscriber<Imu> imu_sub(*nh_ptr, "/imu0", 1);
-  TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
-  sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
+  	// Subscribe to "features" and "imu" topics simultaneously
+  	message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, "/minitaur/image_processor/features", 1);
+  	message_filters::Subscriber<Imu> imu_sub(*nh_ptr, "/zed/imu/data_raw", 1);
+  	TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
+  	sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
-  // Loop, pumping all callbacks (specified in subscriber object)
-  ros::spin(); 
+  	// Loop, pumping all callbacks (specified in subscriber object)
+  	ros::spin(); 
 
-  return 0;
+  	return 0;
 }
 
 // potential ROS messages
