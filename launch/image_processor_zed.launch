@@ -2,7 +2,7 @@
 
   <arg name="robot" default="minitaur"/>
   <arg name="calibration_file"
-    default="$(find legged_vio)/config/zed_imu_camera.yaml"/>
+    default="$(find legged_vio)/config/zed_imu_camera_altered.yaml"/>
 
   <rosparam command="load" file="$(arg calibration_file)"/>
 
