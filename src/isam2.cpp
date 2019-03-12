@@ -100,8 +100,8 @@ public:
 		this->feature_cloud_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
-    vector<int> cam0_intrinsics(4);
-    vector<int> cam1_intrinsics(4);
+    vector<double> cam0_intrinsics(4);
+    vector<double> cam1_intrinsics(4);
     nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); 
     nh_ptr->getParam("cam1/intrinsics", cam1_intrinsics);
 		this->f = (cam0_intrinsics[0] + cam0_intrinsics[1]) / 2;
@@ -126,7 +126,7 @@ public:
 
 		// print to confirm reading the YAML file correctly
 		ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
-		ROS_INFO("intrinsics: %d, %d, %d, %d", cam0_intrinsics[0], cam0_intrinsics[1], cam0_intrinsics[2], cam0_intrinsics[3]);
+		ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], cam0_intrinsics[2], cam0_intrinsics[3]);
     ROS_INFO("Tx: %f", Tx);
 
   }
