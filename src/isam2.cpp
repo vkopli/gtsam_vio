@@ -138,9 +138,6 @@ public:
 
 		// retrieved subscribed features ids and (u,v) image locations from ImageProcessor
   	vector<FeatureMeasurement> feature_vector = camera_msg->features;  
-	  
-		// create vector for published points in PointCloud message
-		//vector<geometry_msgs::Point32> frame_points(feature_vector.size());
 
     	for (int i = 0; i < feature_vector.size(); i++) {
 
@@ -211,13 +208,14 @@ public:
 		double d = uR - uL;
 		double x = uL;
 		double y = v;
-    double W = -d / Tx;
+    double W = -d / this->Tx;
 
 		// estimated feature location in camera frame
-		double X = (x - cx) / W;
-		double Y = (y - cy) / W;
-		double Z = this->f / W;
+		double X_camera = (x - cx) / W;
+		double Y_camera = (y - cy) / W;
+		double Z_camera = this->f / W;
 		
+// update ISAM2
 //  	graph.emplace_shared<
 //  	  GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
 //				noise_model, Symbol('x', frame), Symbol('l', l), K);
@@ -225,12 +223,17 @@ public:
 //		// add initial estimate of landmark if it hasn't appeared yet
 //    if (!initial_estimate.exists(Symbol('l', l))) {
 //  		Pose3 camPose = initial_estimate.at<Pose3>(Symbol('x', frame));
-//  		Point3 worldPoint = camPose.transform_from(Point3(X, Y, Z)); 
+//  		Point3 worldPoint = camPose.transform_from(Point3(X_camera, Y_camera, Z_camera)); 
 //  		initial_estimate.insert(Symbol('l', l), worldPoint);
 //    }
 
+		// transform from camera to world frame using IMU/ISAM2 estimate
+		double X_world = X_camera;
+		double Y_world = Y_camera;
+		double Z_world = Z_camera; 
+
 		// return point corresponding to estimated location
-		pcl::PointXYZ point = pcl::PointXYZ (X, Y, Z);		
+		pcl::PointXYZ point = pcl::PointXYZ (X_world, Y_world, Z_world);		
 
 		return point;
 	}
