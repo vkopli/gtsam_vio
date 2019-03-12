@@ -11,9 +11,11 @@
 
 #include <legged_vio/CameraMeasurement.h>
 #include <sensor_msgs/Imu.h>
-#include <sensor_msgs/PointCloud.h>
-#include <geometry_msgs/Point32.h>
-#include <std_msgs/Float32.h>
+
+#include <sensor_msgs/PointCloud2.h>
+#include <pcl_ros/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/common/centroid.h>
 
 // ISAM2 INCLUDES
 /* ************************************************************************* */
@@ -88,14 +90,14 @@ private:
 	noiseModel::Isotropic::shared_ptr noise_model = noiseModel::Isotropic::Sigma(2, 1.0); // one pixel in u and v
 
 	// Publish PointCloud messages
-	ros::Publisher cloud_pub; 
+	ros::Publisher feature_cloud_pub; 
 
 public:
  
   Callbacks(shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(move(nh_ptr_copy)) {
 
 	  // initialize PointCloud publisher
-		this->cloud_pub = nh_ptr->advertise<sensor_msgs::PointCloud>("cloud", 1000);
+		this->feature_cloud_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
     vector<int> cam0_intrinsics(4);
@@ -131,68 +133,73 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
-		ROS_INFO("hi");
+		// create object to publish PointCloud estimates of features in this frame
+		pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
 
-		// retrieved subscribed features from FeatureMeasurement
+		// retrieved subscribed features ids and (u,v) image locations from ImageProcessor
   	vector<FeatureMeasurement> feature_vector = camera_msg->features;  
-  	ROS_INFO("%lu total features", feature_vector.size());
 	  
 		// create vector for published points in PointCloud message
-		vector<geometry_msgs::Point32> frame_points(feature_vector.size());
+		//vector<geometry_msgs::Point32> frame_points(feature_vector.size());
 
     	for (int i = 0; i < feature_vector.size(); i++) {
 
 			 // initial estimate for pose
 //			initial_estimate.insert(Symbol('x', frame), Pose3());
 
-			// initial estimate for landmarks
-			geometry_msgs::Point32 point = processFeature(feature_vector[i]);
+				// initial estimate for landmarks 
+				pcl::PointXYZ point = processFeature(feature_vector[i]);
 			
-			// add landmark estimate to PointCloud
-			frame_points[i] = point; 
+				// add landmark estimate to PointCloud
+				feature_cloud_msg_ptr->points.push_back(point); 
 
-			if (frame == 0) {
+//				if (frame == 0) {
 
-//      	// Add a prior on pose x0
-//				// 30cm std on x,y,z 0.1 rad on roll,pitch,yaw
-//      	noiseModel::Diagonal::shared_ptr poseNoise = noiseModel::Diagonal::Sigmas((Vector(6) << 				Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); 
-//      	graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), poseNoise);
+//	      	// Add a prior on pose x0
+//					// 30cm std on x,y,z 0.1 rad on roll,pitch,yaw
+//	      	noiseModel::Diagonal::shared_ptr poseNoise = noiseModel::Diagonal::Sigmas((Vector(6) << 				Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); 
+//	      	graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), poseNoise);
 
-      	// Should add prior on landmark l0?
+//		    	 Should add prior on landmark l0?
 
-			} else {
+//				} else {
 
-//				// Update iSAM with the new factors
-//      	isam->update(graph, initial_estimate);
+//					// Update iSAM with the new factors
+//	      	isam->update(graph, initial_estimate);
 
-//      	// Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
-//      	// If accuracy is desired at the expense of time, update(*) can be called additional times
-//      	// to perform multiple optimizer iterations every step.
-//      	isam->update();
+//	      	// Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
+//	      	// If accuracy is desired at the expense of time, update(*) can be called additional times
+//	      	// to perform multiple optimizer iterations every step.
+//	      	isam->update();
 
-//				// estimate for current frame
-//      	Values current_estimate = isam->calculateEstimate();
-//        // Print Results to ROS_INFO
+//					// estimate for current frame
+//	      	Values current_estimate = isam->calculateEstimate();
+//	        / Print Results to ROS_INFO
 
-//      	// Clear the factor graph and values for the next iteration
-//      	graph.resize(0);
-//      	initial_estimate.clear();
+//      		// Clear the factor graph and values for the next iteration
+//      		graph.resize(0);
+//      		initial_estimate.clear();
+//				}
+
 			}
 
-		}
+		// publish feature PointCloud messages
+		feature_cloud_msg_ptr->header.frame_id = "world"; // change later to param loaded in launch file fixed_frame_id
+		feature_cloud_msg_ptr->height = 1;
+		feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
+		this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 
 
-		// publish PointCloud messages
-		sensor_msgs::PointCloud cloud;
-		cloud.header = camera_msg->header;
-		cloud.header.frame_id = "map";
-		cloud.points = frame_points; // Point32 vector of points
-//		cloud.channels = // optional: ChannelFloat32 vector of channels
-		this->cloud_pub.publish(cloud); 
+		// find centroid position of PointCloud
+		Eigen::Matrix<double,4,1> centroid;
+		pcl::compute3DCentroid(*feature_cloud_msg_ptr, centroid);
+
+		ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", 
+							frame, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
 
 		frame++;
   }
 
-	geometry_msgs::Point32 processFeature(FeatureMeasurement feature) {
+	pcl::PointXYZ processFeature(FeatureMeasurement feature) {
 
 		// identify feature (may appear in previous/future frames)
 		int l = feature.id; 
@@ -204,12 +211,12 @@ public:
 		double d = uR - uL;
 		double x = uL;
 		double y = v;
-    	double W = -d / Tx;
+    double W = -d / Tx;
 
 		// estimated feature location in camera frame
 		double X = (x - cx) / W;
 		double Y = (y - cy) / W;
-		double Z = f / W;
+		double Z = this->f / W;
 		
 //  	graph.emplace_shared<
 //  	  GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
@@ -223,10 +230,8 @@ public:
 //    }
 
 		// return point corresponding to estimated location
-		geometry_msgs::Point32 point;
-		point.x = X;
-		point.y = Y;
-		point.z = Z; 
+		pcl::PointXYZ point = pcl::PointXYZ (X, Y, Z);		
+
 		return point;
 	}
 
@@ -243,8 +248,10 @@ int main(int argc, char **argv) {
   	Callbacks callbacks_obj(nh_ptr);
 
   	// Subscribe to "features" and "imu" topics simultaneously
-  	message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, "/minitaur/image_processor/features", 1);
-  	message_filters::Subscriber<Imu> imu_sub(*nh_ptr, "/zed/imu/data_raw", 1);
+		// zed: /minitaur/image_processor/features
+  	message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, "minitaur/image_processor/features", 1); 
+  	// zed: /zed/imu/data_raw
+		message_filters::Subscriber<Imu> imu_sub(*nh_ptr, "/imu0", 1); 
   	TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
   	sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
