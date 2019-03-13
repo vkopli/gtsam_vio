@@ -80,6 +80,10 @@ private:
 	double cx;
 	double cy;
 
+	// Resolution parameters
+	double resolution_x;
+	double resolution_y;
+
 	// Camera calibration intrinsic matrix
 	Cal3_S2Stereo::shared_ptr K;
 
@@ -100,6 +104,7 @@ public:
 		this->feature_cloud_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
+    vector<double> resolution(2);
     vector<double> cam0_intrinsics(4);
     vector<double> cam1_intrinsics(4);
     nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); 
@@ -116,7 +121,10 @@ public:
 		vector<double> T_cam1(16);
 		nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
 		this->Tx = T_cam1[3];
-		ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1")); 
+		ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1"));
+    		nh_ptr->getParam("cam0/resolution", resolution);
+		resolution_x = resolution[0];
+		resolution_y = resolution[1];
     
     // iSAM2 settings
     ISAM2Params parameters;
@@ -181,7 +189,7 @@ public:
 			}
 
 		// publish feature PointCloud messages
-		feature_cloud_msg_ptr->header.frame_id = "world"; // change later to param loaded in launch file fixed_frame_id
+		feature_cloud_msg_ptr->header.frame_id = "zed_left_camera_optical_frame"; // change later to param loaded in launch file fixed_frame_id
 		feature_cloud_msg_ptr->height = 1;
 		feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
 		this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 
@@ -190,8 +198,7 @@ public:
 		Eigen::Matrix<double,4,1> centroid;
 		pcl::compute3DCentroid(*feature_cloud_msg_ptr, centroid);
 
-		ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", 
-							frame, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
+		//ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", frame, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
 
 		frame++;
   }
@@ -199,21 +206,22 @@ public:
 	pcl::PointXYZ processFeature(FeatureMeasurement feature) {
 
 		// identify feature (may appear in previous/future frames)
-		int l = feature.id; 
+		int l = feature.id;
 
-		double uL = feature.u0;
-		double uR = feature.u1;
-		double v = (feature.v0 + feature.v1) / 2;
+		double uL = (double)feature.u0*0.5*resolution_x;
+		double uR = (double)feature.u1*0.5*resolution_x;
+		double v = ((double)feature.v0 + (double)feature.v1)*0.5*resolution_y / 2.0;
 
-		double d = uR - uL;
-		double x = uL;
-		double y = v;
-    double W = -d / this->Tx;
+		double d = (double)uR - (double)uL;
+		double x = (double)uL;
+		double y = (double)v;
+    		double W = d / this->Tx;
 
 		// estimated feature location in camera frame
-		double X_camera = (x - cx) / W;
-		double Y_camera = (y - cy) / W;
+		double X_camera = x / W;
+		double Y_camera = y / W;
 		double Z_camera = this->f / W;
+		std::cout << feature.u0 << "\t" << feature.u1 << std::endl;
 		
 // update ISAM2
 //  	graph.emplace_shared<
@@ -254,7 +262,7 @@ int main(int argc, char **argv) {
 		// zed: /minitaur/image_processor/features
   	message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, "minitaur/image_processor/features", 1); 
   	// zed: /zed/imu/data_raw
-		message_filters::Subscriber<Imu> imu_sub(*nh_ptr, "/imu0", 1); 
+		message_filters::Subscriber<Imu> imu_sub(*nh_ptr, "/zed/imu/data", 1); 
   	TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
   	sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
