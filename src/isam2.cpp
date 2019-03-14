@@ -55,6 +55,14 @@ using namespace legged_vio;
 using namespace sensor_msgs;
 using namespace gtsam;
 
+// VARIABLES THAT SHOULD BE SPECIFIED IN NODELET
+/* ************************************************************************* */
+
+struct LaunchVariables {
+  string feature_topic_id = "minitaur/image_processor/features";
+  string imu_topic_id = "/imu0"; //"/zed/imu/data"; // "/imu0"
+  string fixed_frame_id = "map"; // "zed_left_camera_optical_frame"; // "map"
+};
 
 // CALLBACK WRAPPER CLASS
 /* ************************************************************************* */
@@ -62,6 +70,8 @@ using namespace gtsam;
 class Callbacks { 
 
 private:
+
+  LaunchVariables lv;
   
 	int frame = 0;
 
@@ -189,7 +199,7 @@ public:
 			}
 
 		// publish feature PointCloud messages
-		feature_cloud_msg_ptr->header.frame_id = "zed_left_camera_optical_frame"; // change later to param loaded in launch file fixed_frame_id
+		feature_cloud_msg_ptr->header.frame_id = lv.fixed_frame_id;
 		feature_cloud_msg_ptr->height = 1;
 		feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
 		this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 
@@ -198,7 +208,7 @@ public:
 		Eigen::Matrix<double,4,1> centroid;
 		pcl::compute3DCentroid(*feature_cloud_msg_ptr, centroid);
 
-		//ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", frame, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
+		ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", frame, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
 
 		frame++;
   }
@@ -208,20 +218,20 @@ public:
 		// identify feature (may appear in previous/future frames)
 		int l = feature.id;
 
-		double uL = (double)feature.u0*0.5*resolution_x;
-		double uR = (double)feature.u1*0.5*resolution_x;
-		double v = ((double)feature.v0 + (double)feature.v1)*0.5*resolution_y / 2.0;
+		double uL = feature.u0 * 0.5 * resolution_x;
+		double uR = feature.u1 * 0.5 * resolution_x;
+		double v = (feature.v0 + feature.v1) / 2.0 * 0.5 * resolution_y;
 
-		double d = (double)uR - (double)uL;
-		double x = (double)uL;
-		double y = (double)v;
-    		double W = d / this->Tx;
+		double d = uR - uL;
+		double x = uL;
+		double y = v;
+		double W = d / this->Tx;
 
 		// estimated feature location in camera frame
 		double X_camera = x / W;
 		double Y_camera = y / W;
 		double Z_camera = this->f / W;
-		std::cout << feature.u0 << "\t" << feature.u1 << std::endl;
+//		std::cout << feature.u0 << "\t" << feature.u1 << std::endl;
 		
 // update ISAM2
 //  	graph.emplace_shared<
@@ -252,6 +262,8 @@ public:
 /* ************************************************************************* */
 int main(int argc, char **argv) {
 
+    LaunchVariables lv;
+
   	ros::init(argc, argv, "isam2"); // specify name of node and ROS arguments
   	shared_ptr<ros::NodeHandle> nh_ptr = make_shared<ros::NodeHandle>();
 
@@ -260,9 +272,9 @@ int main(int argc, char **argv) {
 
   	// Subscribe to "features" and "imu" topics simultaneously
 		// zed: /minitaur/image_processor/features
-  	message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, "minitaur/image_processor/features", 1); 
+  	message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, lv.feature_topic_id, 1); 
   	// zed: /zed/imu/data_raw
-		message_filters::Subscriber<Imu> imu_sub(*nh_ptr, "/zed/imu/data", 1); 
+		message_filters::Subscriber<Imu> imu_sub(*nh_ptr, lv.imu_topic_id, 1); 
   	TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
   	sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
@@ -271,11 +283,4 @@ int main(int argc, char **argv) {
 
   	return 0;
 }
-
-// potential ROS messages
-//ROS_INFO("IMU header: [%s]", imu_msg->header.frame_id);
-//std_msgs::Header header = camera_msg->header;
-//geometry_msgs::Quaternion ori = imu_msg->orientation;
-//ROS_INFO("Camera Coor: [id = %d, u = %f, v = %f]", features[0].id, features[0].u0, features[0].v0);
-
 
