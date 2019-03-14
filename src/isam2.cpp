@@ -242,8 +242,8 @@ public:
   		Pose3 cam_pose = initial_estimate.at<Pose3>(Symbol('x', frame));
   		Point3 world_point = cam_pose.transform_from(camera_point); 
   		initial_estimate.insert(Symbol('l', l), world_point);
-//      noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
-//      graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', l), world_point, point_noise); 
+////      noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
+////      graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', l), world_point, point_noise); 
     }		
 
     return camera_point;
