@@ -177,21 +177,21 @@ public:
 
       } else {
 
-//        // Update iSAM with the new factors
-//        isam->update(graph, initial_estimate);
+        // Update iSAM with the new factors
+//        isam->update(graph, initial_estimate); // causes segmentation fault
 
-//        // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
+        // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
 //        // If accuracy is desired at the expense of time, update(*) can be called additional times
 //        // to perform multiple optimizer iterations every step.
 //        isam->update();
 
-//        // estimate for current frame
-//        Values current_estimate = isam->calculateEstimate();
+        // estimate for current frame
+        Values current_estimate = isam->calculateEstimate();
 //        // Print Results to ROS_INFO with currentEstimate.print("Current estimate: ");
 
-//        // Clear the factor graph and values for the next iteration
-//        graph.resize(0);
-//        initial_estimate.clear();
+        // Clear the factor graph and values for the next iteration
+        graph.resize(0);
+//        initial_estimate.clear(); // causes core dump after printing frame 0: Attempting to at the key "x1", which does not exist in the Values
       }
 
     }
