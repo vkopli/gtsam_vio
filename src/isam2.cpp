@@ -146,12 +146,12 @@ public:
     ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], cam0_intrinsics[2], cam0_intrinsics[3]);
     ROS_INFO("Tx: %f", Tx);
-
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
     // initial estimate for camera pose at current frame
+    cout << 'x' << frame << " added to initial_estimate" << endl;
     initial_estimate.insert(Symbol('x', frame), Pose3());
 
     // create object to publish PointCloud estimates of features in this frame
@@ -162,38 +162,42 @@ public:
 
     for (int i = 0; i < feature_vector.size(); i++) {
 
-      // initial estimate for landmarks 
-      Point3 camera_point = processFeature(feature_vector[i]);
-
-      // add landmark estimate to PointCloud
-      pcl::PointXYZ pcl_camera_point = pcl::PointXYZ (camera_point.x(), camera_point.y(), camera_point.z());
-      feature_cloud_msg_ptr->points.push_back(pcl_camera_point); 
-
-      if (frame == 0) {
-
-        // Add a prior on pose x0: zero pose
-        noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
-        graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
-
-      } else {
-
-        // Update iSAM with the new factors
-//        isam->update(graph, initial_estimate); // causes segmentation fault
-
-        // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
-//        // If accuracy is desired at the expense of time, update(*) can be called additional times
-//        // to perform multiple optimizer iterations every step.
-//        isam->update();
-
-        // estimate for current frame
-        Values current_estimate = isam->calculateEstimate();
-//        // Print Results to ROS_INFO with currentEstimate.print("Current estimate: ");
-
-        // Clear the factor graph and values for the next iteration
-        graph.resize(0);
-//        initial_estimate.clear(); // causes core dump after printing frame 0: Attempting to at the key "x1", which does not exist in the Values
+      // estimate world coor of feature, add to initial_estimate, and add to PointCloud 
+      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr);
+      
+      if (frame == 0 && i == 0) {
+        if (world_point == Point3()) { // (0,0,0): default position when no feature found
+          ROS_WARN("No features in first frame");
+        }
+        // Add a prior on landmark l0 since seen in pose x0 (frame 0) which is reference camera frame
+        noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
+        graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', 0), world_point, point_noise);
       }
+      
+    }
+          
+    if (frame == 0) {
 
+    // Add a prior on pose x0: zero pose
+    noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
+    graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
+
+    } else {
+//      // Update iSAM with the new factors
+//      isam->update(graph, initial_estimate); // causes segmentation fault
+
+//      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
+//      // If accuracy is desired at the expense of time, update(*) can be called additional times
+//      // to perform multiple optimizer iterations every step.
+//      isam->update();
+
+//      // estimate for current frame
+//      Values current_estimate = isam->calculateEstimate();
+//      // Print Results to ROS_INFO with currentEstimate.print("Current estimate: ");
+
+      // Clear the factor graph and values for the next iteration
+      graph.resize(0);
+//      initial_estimate.clear(); // causes core dump after printing frame 0: Attempting to at the key "x1", which does not exist in the Values
     }
 
     // publish feature PointCloud messages
@@ -211,7 +215,9 @@ public:
     frame++;
   }
 
-  Point3 processFeature(FeatureMeasurement feature) {
+  Point3 processFeature(FeatureMeasurement feature, pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr) {
+
+    Point3 world_point;
 
     // identify feature (may appear in previous/future frames)
     int l = feature.id;
@@ -231,22 +237,23 @@ public:
     double Z_camera = this->f / W;
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
+    // add location in camera frame to PointCloud
+    pcl::PointXYZ pcl_camera_point = pcl::PointXYZ (camera_point.x(), camera_point.y(), camera_point.z());
+    feature_cloud_msg_ptr->points.push_back(pcl_camera_point); 
     
     // update ISAM2
     graph.emplace_shared<
       GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
         noise_model, Symbol('x', frame), Symbol('l', l), K);
 
-		// add initial estimate of landmark if it hasn't appeared yet, add priors?
+		// add initial estimate of landmark if it hasn't appeared yet
     if (!initial_estimate.exists(Symbol('l', l))) {
   		Pose3 cam_pose = initial_estimate.at<Pose3>(Symbol('x', frame));
-  		Point3 world_point = cam_pose.transform_from(camera_point); 
-  		initial_estimate.insert(Symbol('l', l), world_point);
-////      noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
-////      graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', l), world_point, point_noise); 
+  		world_point = cam_pose.transform_from(camera_point); 
+  		initial_estimate.insert(Symbol('l', l), world_point); 
     }		
 
-    return camera_point;
+    return world_point;
   }
 
 };
