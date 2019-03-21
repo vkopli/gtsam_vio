@@ -151,7 +151,6 @@ public:
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
     // initial estimate for camera pose at current frame
-    cout << 'x' << frame << " added to initial_estimate" << endl;
     initial_estimate.insert(Symbol('x', frame), Pose3());
 
     // create object to publish PointCloud estimates of features in this frame
@@ -183,7 +182,7 @@ public:
     graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
 
     } else {
-//      // Update iSAM with the new factors
+      // Update iSAM with the new factors
 //      isam->update(graph, initial_estimate); // causes segmentation fault
 
 //      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
@@ -197,7 +196,7 @@ public:
 
       // Clear the factor graph and values for the next iteration
       graph.resize(0);
-//      initial_estimate.clear(); // causes core dump after printing frame 0: Attempting to at the key "x1", which does not exist in the Values
+      initial_estimate.clear(); 
     }
 
     // publish feature PointCloud messages
