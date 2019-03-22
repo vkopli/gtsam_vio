@@ -165,25 +165,28 @@ public:
       Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr);
       
       if (frame == 0 && i == 0) {
+        
         if (world_point == Point3()) { // (0,0,0): default position when no feature found
           ROS_WARN("No features in first frame");
         }
+        
         // Add a prior on landmark l0 since seen in pose x0 (frame 0) which is reference camera frame
         noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
-        graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', 0), world_point, point_noise);
+        graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', feature_vector[i].id), world_point, point_noise);
       }
       
     }
           
     if (frame == 0) {
 
-    // Add a prior on pose x0: zero pose
-    noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
-    graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
+      // Add a prior on pose x0: zero pose
+      noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
+      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
 
     } else {
+    
       // Update iSAM with the new factors
-//      isam->update(graph, initial_estimate); // causes segmentation fault
+      isam->update(graph, initial_estimate); // causes segmentation fault
 
 //      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
 //      // If accuracy is desired at the expense of time, update(*) can be called additional times
@@ -221,9 +224,9 @@ public:
     // identify feature (may appear in previous/future frames)
     int l = feature.id;
 
-    double uL = feature.u0 * 0.5 * resolution_x;
-    double uR = feature.u1 * 0.5 * resolution_x;
-    double v = (feature.v0 + feature.v1) / 2.0 * 0.5 * resolution_y;
+    double uL = (feature.u0 * 0.5 + 0.5) * resolution_x;
+    double uR = (feature.u1 * 0.5 + 0.5) * resolution_x ;
+    double v = ((feature.v0 + feature.v1) / 2.0 * 0.5 + 0.5) * resolution_y;
 
     double d = uR - uL;
     double x = uL;
@@ -231,8 +234,8 @@ public:
     double W = d / this->Tx;
 
     // estimated feature location in camera frame
-    double X_camera = x / W;
-    double Y_camera = y / W;
+    double X_camera = (x - cx) / W;
+    double Y_camera = (y - cy) / W;
     double Z_camera = this->f / W;
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
@@ -242,7 +245,7 @@ public:
     
     // update ISAM2
     graph.emplace_shared<
-      GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
+      GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v),
         noise_model, Symbol('x', frame), Symbol('l', l), K);
 
 		// add initial estimate of landmark if it hasn't appeared yet
