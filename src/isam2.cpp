@@ -48,6 +48,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <opencv2/opencv.hpp>
 
 using namespace std;
 using namespace message_filters;
@@ -89,8 +90,8 @@ private:
   double f;
   double cx;
   double cy;
-
-  // Resolution parameters
+  
+  // Image distortion intrinsics
   double resolution_x;
   double resolution_y;
 
@@ -114,27 +115,34 @@ public:
     this->feature_cloud_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
-    vector<double> resolution(2);
     vector<double> cam0_intrinsics(4);
-    vector<double> cam1_intrinsics(4);
-    nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); 
-    nh_ptr->getParam("cam1/intrinsics", cam1_intrinsics);
+    nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); // <- neglect right camera 
     this->f = (cam0_intrinsics[0] + cam0_intrinsics[1]) / 2;
-    // neglecting image center of right camera...
-    this->cx = cam0_intrinsics[2];
+    this->cx = cam0_intrinsics[2];  
     this->cy = cam0_intrinsics[3];
     
-    // K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative)
-    Cal3_S2Stereo::shared_ptr K(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, cx, cy, -Tx)); 
+    // YAML image distortion parameters (radtan): [k1 k2 r1 r2]
+    vector<double> cam0_resolution(2);
+    vector<double> cam0_distortion_coeffs(4);
+    nh_ptr->getParam("cam0/resolution", cam0_resolution); // <- neglect right camera
+    nh_ptr->getParam("cam0/distortion_coeffs", cam0_distortion_coeffs);
+    double k1 = cam0_distortion_coeffs[0];
+    double k2 = cam0_distortion_coeffs[1];
+    double r1 = cam0_distortion_coeffs[2];
+    double r2 = cam0_distortion_coeffs[3];
+    double image_scaling = 1; // take into account scaling
+    this->resolution_x =  cam0_resolution[0] * image_scaling;
+    this->resolution_y =  cam0_resolution[1] * image_scaling;
     
     // YAML extrinsics (distance between 2 cameras)
     vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
     ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1"));
-    		nh_ptr->getParam("cam0/resolution", resolution);
-    resolution_x = resolution[0];
-    resolution_y = resolution[1];
+    
+    // set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative)
+    this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
+    this->cx, this->cy, -this->Tx));
     
     // iSAM2 settings
     ISAM2Params parameters;
@@ -144,7 +152,8 @@ public:
 
     // print to confirm reading the YAML file correctly
     ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
-    ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], cam0_intrinsics[2], cam0_intrinsics[3]);
+    ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
+      cam0_intrinsics[2], cam0_intrinsics[3]);
     ROS_INFO("Tx: %f", Tx);
   }
 
@@ -186,7 +195,7 @@ public:
     } else {
     
       // Update iSAM with the new factors
-      isam->update(graph, initial_estimate); // causes segmentation fault
+//      isam->update(graph, initial_estimate); // causes segmentation fault
 
 //      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
 //      // If accuracy is desired at the expense of time, update(*) can be called additional times
@@ -219,14 +228,15 @@ public:
 
   Point3 processFeature(FeatureMeasurement feature, pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr) {
 
+    // initialize world coordinate
     Point3 world_point;
 
     // identify feature (may appear in previous/future frames)
     int l = feature.id;
 
-    double uL = (feature.u0 * 0.5 + 0.5) * resolution_x;
-    double uR = (feature.u1 * 0.5 + 0.5) * resolution_x ;
-    double v = ((feature.v0 + feature.v1) / 2.0 * 0.5 + 0.5) * resolution_y;
+    double uL = (feature.u0 + 1) * 0.5 * resolution_x;
+    double uR = (feature.u1 + 1) * 0.5 * resolution_x ;
+    double v = ((feature.v0 + feature.v1) / 2.0 + 1) * 0.5 * resolution_y;
 
     double d = uR - uL;
     double x = uL;
@@ -236,7 +246,7 @@ public:
     // estimated feature location in camera frame
     double X_camera = (x - cx) / W;
     double Y_camera = (y - cy) / W;
-    double Z_camera = this->f / W;
+    double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
     // add location in camera frame to PointCloud
