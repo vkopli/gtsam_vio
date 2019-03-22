@@ -130,7 +130,7 @@ public:
     double k2 = cam0_distortion_coeffs[1];
     double r1 = cam0_distortion_coeffs[2];
     double r2 = cam0_distortion_coeffs[3];
-    double image_scaling = 1; // take into account scaling
+    double image_scaling = 1 + k1 + k2; // take into account scaling
     this->resolution_x =  cam0_resolution[0] * image_scaling;
     this->resolution_y =  cam0_resolution[1] * image_scaling;
     
