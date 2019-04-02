@@ -169,7 +169,7 @@ public:
     // create object to publish PointCloud estimates of features in this frame
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
-    for (int i = 0; i < feature_vector.size(); i++) { //
+    for (int i = 0; i < feature_vector.size(); i++) { 
 
       // add node for feature if not already there and connect to current pose with a factor
       // add estimated world coordinate of feature to PointCloud 
@@ -202,21 +202,23 @@ public:
 
     } else {
     
-      // update iSAM with the factors and node values up to this point
+      ROS_INFO("before call");
+      // update iSAM with new factors and node values from this frame
       isam->update(graph, values); 
+      ROS_INFO("after call");
 
 //      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
 //      // If accuracy is desired at the expense of time, update(*) can be called additional times
 //      // to perform multiple optimizer iterations every step.
 //      isam->update();
 
-      // update estimated node values up to this point
-      values = isam->calculateEstimate();
-      values.print("Current estimate: ");
+      // print estimated node values up to this point
+      Values currentEstimate = isam->calculateEstimate();
+      currentEstimate.print("Current estimate: ");
 
-//      // Clear the objects holding new factors and node values for the next iteration
-//      graph.resize(0);
-//      values.clear();
+      // Clear the objects holding new factors and node values for the next iteration
+      graph.resize(0);
+      values.clear();
     }
 
     frame++;
