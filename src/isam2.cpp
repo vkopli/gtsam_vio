@@ -170,15 +170,12 @@ public:
 
     for (int i = 0; i < feature_vector.size(); i++) {
 
-      // estimate world coor of feature, add to initial_estimate, and add to PointCloud 
+      // estimate world coor of feature (if first time appearing) and add to initial_estimate
+      // add connect/add feature to graph and PointCloud 
       Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr);
       
       if (frame == 0 && i == 0) {
-        
-        if (world_point == Point3()) { // (0,0,0): default position when no feature found
-          ROS_WARN("No features in first frame");
-        }
-        
+
         // Add a prior on landmark l0 since seen in pose x0 (frame 0) which is reference camera frame
         noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
         graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', feature_vector[i].id), world_point, point_noise);
@@ -283,9 +280,7 @@ int main(int argc, char **argv) {
   Callbacks callbacks_obj(nh_ptr);
 
   // Subscribe to "features" and "imu" topics simultaneously
-  // zed: /minitaur/image_processor/features
   message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, lv.feature_topic_id, 1); 
-  // zed: /zed/imu/data_raw
   message_filters::Subscriber<Imu> imu_sub(*nh_ptr, lv.imu_topic_id, 1); 
   TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
