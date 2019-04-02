@@ -61,8 +61,8 @@ using namespace gtsam;
 
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
-  string imu_topic_id = "/imu0"; //"/zed/imu/data"; // "/imu0"
-  string fixed_frame_id = "map"; // "zed_left_camera_optical_frame"; // "map"
+  string imu_topic_id = "/zed/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
+  string fixed_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
 };
 
 // CALLBACK WRAPPER CLASS
@@ -121,16 +121,16 @@ public:
     this->cx = cam0_intrinsics[2];  
     this->cy = cam0_intrinsics[3];
     
-    // YAML image distortion parameters (radtan): [k1 k2 r1 r2]
+//    // YAML image distortion parameters (radtan): [k1 k2 r1 r2]
     vector<double> cam0_resolution(2);
-    vector<double> cam0_distortion_coeffs(4);
+//    vector<double> cam0_distortion_coeffs(4);
     nh_ptr->getParam("cam0/resolution", cam0_resolution); // <- neglect right camera
-    nh_ptr->getParam("cam0/distortion_coeffs", cam0_distortion_coeffs);
-    double k1 = cam0_distortion_coeffs[0];
-    double k2 = cam0_distortion_coeffs[1];
-    double r1 = cam0_distortion_coeffs[2];
-    double r2 = cam0_distortion_coeffs[3];
-    double image_scaling = 1 + k1 + k2; // take into account scaling
+//    nh_ptr->getParam("cam0/distortion_coeffs", cam0_distortion_coeffs);
+//    double k1 = cam0_distortion_coeffs[0];
+//    double k2 = cam0_distortion_coeffs[1];
+//    double r1 = cam0_distortion_coeffs[2];
+//    double r2 = cam0_distortion_coeffs[3];
+    double image_scaling = 1; // take into account scaling
     this->resolution_x =  cam0_resolution[0] * image_scaling;
     this->resolution_y =  cam0_resolution[1] * image_scaling;
     
