@@ -97,14 +97,13 @@ private:
   double resolution_y;
 
   // Camera calibration intrinsic matrix
-//  Cal3_S2Stereo::shared_ptr K; /////////////////////////////////////////////////////////////////////
-  Cal3_S2::shared_ptr K;
+  Cal3_S2Stereo::shared_ptr K; 
 
   // Camera calibration extrinsic
   double Tx; // distance from cam0 to cam1
 
   // --> Camera observation noise model (has to do with IMU?)
-  noiseModel::Isotropic::shared_ptr noise_model = noiseModel::Isotropic::Sigma(2, 1.0); // one pixel in u and v
+  noiseModel::Isotropic::shared_ptr noise_model = noiseModel::Isotropic::Sigma(3, 1.0); // one pixel in u and v
 
   // Publish PointCloud messages
   ros::Publisher feature_cloud_pub; 
@@ -143,10 +142,8 @@ public:
     ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1"));
     
     // set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) //////////////////////
-//    this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
-//      this->cx, this->cy, -this->Tx));
-    this->K.reset(new Cal3_S2(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
-      this->cx, this->cy));
+    this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
+      this->cx, this->cy, -this->Tx));
     
     // iSAM2 settings
     ISAM2Params parameters;
@@ -257,15 +254,13 @@ public:
   	  Pose3 cam_pose = values.at<Pose3>(Symbol('x', frame));
       world_point = cam_pose.transform_from(camera_point); 
       values.insert(Symbol('l', l), world_point); 
-    }		
+    } else {
+//      ROS_INFO("feature %d seen in previous frame", l);
+    }
     
     // add factor from this frame's pose to the feature/landmark
-//    graph.emplace_shared<
-//      GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), /////////////////////////////////
-//        noise_model, Symbol('x', frame), Symbol('l', l), K);
-    Point2 measurement = Point2(x, y);
     graph.emplace_shared<
-      GenericProjectionFactor<Pose3, Point3, Cal3_S2> >(measurement, 
+      GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), /////////////////////////////////
         noise_model, Symbol('x', frame), Symbol('l', l), K);
         
     return world_point;
