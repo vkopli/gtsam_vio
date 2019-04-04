@@ -179,7 +179,7 @@ public:
       
       // lasts 1 more frame before becoming indeterminate if priors added all feautre in first pose
       if (pose_id == 0) { 
-        // Add a prior on landmark l0 since seen in pose x0 (pose 0) which is reference camera frame
+        // Add a prior on landmark since seen in pose x0 (pose 0) which is reference camera frame
         noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
         graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', feature_vector[i].id), world_point, point_noise);
       }
