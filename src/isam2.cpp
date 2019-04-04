@@ -46,6 +46,7 @@
 // ADDITIONAL INCLUDES
 /* ************************************************************************* */
 
+#include <set>
 #include <vector>
 #include <memory>
 #include <map>
@@ -75,17 +76,20 @@ private:
 
   LaunchVariables lv;
   
-  int frame = 0;
+  int pose_id = 0;
 
-  // Hold node handle initialized in main
+  // Hold ROS node handle initialized in main
   shared_ptr<ros::NodeHandle> nh_ptr;
+
+  // --> Create iSAM2 object
+  unique_ptr<ISAM2> isam;
 
   // Initialize Factor Graph and Values Estimates on Nodes (continually updated by isam.update()) 
   NonlinearFactorGraph graph;
   Values values;
-
-  // --> Create iSAM2 object
-  unique_ptr<ISAM2> isam;
+  
+  // Keep track of what landmarks (features) have been seen so far
+  set<int> landmarks_seen;
 
   // Camera calibration intrinsics
   double f;
@@ -160,23 +164,21 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
-    // add node value for camera pose in current frame
-    values.insert(Symbol('x', frame), Pose3());
+    // add node value for camera pose in current pose
+    values.insert(Symbol('x', pose_id), Pose3());
 
-    // use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this frame
-    vector<FeatureMeasurement> feature_vector = camera_msg->features;  
+    // use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
+    vector<FeatureMeasurement> feature_vector = camera_msg->features; 
     
-    // create object to publish PointCloud estimates of features in this frame
+    // create object to publish PointCloud estimates of features in this pose
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
 
-      // add node for feature if not already there and connect to current pose with a factor
-      // add estimated world coordinate of feature to PointCloud 
-      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr);
+      processFeature(feature_vector[i], feature_cloud_msg_ptr, landmarks_seen);
       
 //      if (i == 0) { 
-//        // Add a prior on landmark l0 since seen in pose x0 (frame 0) which is reference camera frame
+//        // Add a prior on landmark l0 since seen in pose x0 (pose 0) which is reference camera frame
 //        noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
 //        graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', feature_vector[i].id), world_point, point_noise);
 //      }
@@ -189,12 +191,12 @@ public:
     feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
     this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 
     
-    // print info about this frame to console
+    // print info about this pose to console
     Eigen::Matrix<double,4,1> centroid;
     pcl::compute3DCentroid(*feature_cloud_msg_ptr, centroid);     // find centroid position of PointCloud
-    ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", frame, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
+    ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", pose_id, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
           
-    if (frame == 0) {
+    if (pose_id == 0) {
 
       // add prior on pose x0 (zero pose is used to set world frame)
       noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
@@ -202,10 +204,8 @@ public:
 
     } else {
     
-      ROS_INFO("before call");
-      // update iSAM with new factors and node values from this frame
+      // update iSAM with new factors and node values from this pose
       isam->update(graph, values); 
-      ROS_INFO("after call");
 
 //      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
 //      // If accuracy is desired at the expense of time, update(*) can be called additional times
@@ -221,16 +221,19 @@ public:
       values.clear();
     }
 
-    frame++;
+    pose_id++;
   }
 
-  Point3 processFeature(FeatureMeasurement feature, pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr) {
 
-    // initialize world coordinate
-    Point3 world_point;
+  // add node for feature if not already there and connect to current pose with a factor
+  // add estimated world coordinate of feature to PointCloud 
+  void processFeature(FeatureMeasurement feature, 
+                      pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr,
+                      set<int>& landmarks_seen) {
 
-    // identify feature (may appear in previous/future frames)
-    int l = feature.id;
+    // identify feature (may appear in previous/future frames) and mark as "seen"
+    int landmark_id = feature.id;
+    Symbol landmark = Symbol('l', landmark_id);
 
     double uL = (feature.u0 + 1) * 0.5 * resolution_x;
     double uR = (feature.u1 + 1) * 0.5 * resolution_x ;
@@ -252,20 +255,21 @@ public:
     feature_cloud_msg_ptr->points.push_back(pcl_camera_point); 
 
 		// add node value for feature/landmark if it doesn't already exist
-    if (!values.exists(Symbol('l', l))) {
-  	  Pose3 cam_pose = values.at<Pose3>(Symbol('x', frame));
-      world_point = cam_pose.transform_from(camera_point); 
-      values.insert(Symbol('l', l), world_point); 
+		bool new_landmark = landmarks_seen.find(landmark_id) == landmarks_seen.end();
+    if (new_landmark) {
+      ROS_INFO("first time seeing feature %d", landmark_id); 
+      landmarks_seen.insert(landmark_id);
+  	  Pose3 cam_pose = values.at<Pose3>(Symbol('x', pose_id));
+      Point3 world_point = cam_pose.transform_from(camera_point); 
+      values.insert(landmark, world_point);
     } else {
-//      ROS_INFO("feature %d seen in previous frame", l);
+//      ROS_INFO("feature %d seen in previous frame", landmark_id);
     }
     
     // add factor from this frame's pose to the feature/landmark
     graph.emplace_shared<
-      GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), /////////////////////////////////
-        noise_model, Symbol('x', frame), Symbol('l', l), K);
-        
-    return world_point;
+      GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
+        noise_model, Symbol('x', pose_id), landmark, K);
   } 
 
 };
