@@ -175,13 +175,14 @@ public:
     
     for (int i = 0; i < feature_vector.size(); i++) { 
 
-      processFeature(feature_vector[i], feature_cloud_msg_ptr, landmarks_seen);
+      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr, landmarks_seen);
       
-//      if (i == 0) { 
-//        // Add a prior on landmark l0 since seen in pose x0 (pose 0) which is reference camera frame
-//        noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
-//        graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', feature_vector[i].id), world_point, point_noise);
-//      }
+      // lasts 1 more frame before becoming indeterminate if priors added all feautre in first pose
+      if (pose_id == 0) { 
+        // Add a prior on landmark l0 since seen in pose x0 (pose 0) which is reference camera frame
+        noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
+        graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', feature_vector[i].id), world_point, point_noise);
+      }
       
     }
     
@@ -227,9 +228,11 @@ public:
 
   // add node for feature if not already there and connect to current pose with a factor
   // add estimated world coordinate of feature to PointCloud 
-  void processFeature(FeatureMeasurement feature, 
+  Point3 processFeature(FeatureMeasurement feature, 
                       pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr,
                       set<int>& landmarks_seen) {
+
+    Point3 world_point;
 
     // identify feature (may appear in previous/future frames) and mark as "seen"
     int landmark_id = feature.id;
@@ -260,7 +263,7 @@ public:
       ROS_INFO("first time seeing feature %d", landmark_id); 
       landmarks_seen.insert(landmark_id);
   	  Pose3 cam_pose = values.at<Pose3>(Symbol('x', pose_id));
-      Point3 world_point = cam_pose.transform_from(camera_point); 
+      world_point = cam_pose.transform_from(camera_point); 
       values.insert(landmark, world_point);
     } else {
 //      ROS_INFO("feature %d seen in previous frame", landmark_id);
@@ -270,6 +273,8 @@ public:
     graph.emplace_shared<
       GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
         noise_model, Symbol('x', pose_id), landmark, K);
+        
+    return world_point;
   } 
 
 };
