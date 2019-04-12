@@ -87,9 +87,7 @@ private:
   // Initialize Factor Graph and Values Estimates on Nodes (continually updated by isam.update()) 
   NonlinearFactorGraph graph;
   Values values;
-  
-  // Keep track of what landmarks (features) have been seen so far
-  set<int> landmarks_seen;
+  Values currentEstimate; // current estimate of values
 
   // Camera calibration intrinsics
   double f;
@@ -145,7 +143,7 @@ public:
     this->Tx = T_cam1[3];
     ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1"));
     
-    // set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) //////////////////////
+    // set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
       this->cx, this->cy, -this->Tx));
     
@@ -175,14 +173,7 @@ public:
     
     for (int i = 0; i < feature_vector.size(); i++) { 
 
-      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr, landmarks_seen);
-      
-      // lasts 1 more frame before becoming indeterminate if priors added all feautre in first pose
-      if (pose_id == 0) { 
-        // Add a prior on landmark since seen in pose x0 (pose 0) which is reference camera frame
-        noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
-        graph.emplace_shared<PriorFactor<Point3> >(Symbol('l', feature_vector[i].id), world_point, point_noise);
-      }
+      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr);
       
     }
     
@@ -203,18 +194,23 @@ public:
       noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
       graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
 
+      currentEstimate = values; // currentEstimate is actually just all the estimates right now
+
     } else {
     
       // update iSAM with new factors and node values from this pose
+      
+//      ROS_INFO("before update step");
       isam->update(graph, values); 
 
-//      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
-//      // If accuracy is desired at the expense of time, update(*) can be called additional times
-//      // to perform multiple optimizer iterations every step.
+      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
+      // If accuracy is desired at the expense of time, update(*) can be called additional times
+      // to perform multiple optimizer iterations every step.
 //      isam->update();
+//      ROS_INFO("after update step");
 
       // print estimated node values up to this point
-      Values currentEstimate = isam->calculateEstimate();
+      currentEstimate = isam->calculateEstimate();
       currentEstimate.print("Current estimate: ");
 
       // Clear the objects holding new factors and node values for the next iteration
@@ -229,8 +225,7 @@ public:
   // add node for feature if not already there and connect to current pose with a factor
   // add estimated world coordinate of feature to PointCloud 
   Point3 processFeature(FeatureMeasurement feature, 
-                      pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr,
-                      set<int>& landmarks_seen) {
+                      pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr) {
 
     Point3 world_point;
 
@@ -258,21 +253,27 @@ public:
     feature_cloud_msg_ptr->points.push_back(pcl_camera_point); 
 
 		// add node value for feature/landmark if it doesn't already exist
-		bool new_landmark = landmarks_seen.find(landmark_id) == landmarks_seen.end();
+		bool new_landmark = !currentEstimate.exists(Symbol('l', landmark_id));
     if (new_landmark) {
-      ROS_INFO("first time seeing feature %d", landmark_id); 
-      landmarks_seen.insert(landmark_id);
-  	  Pose3 cam_pose = values.at<Pose3>(Symbol('x', pose_id));
+//      ROS_INFO("first time seeing feature %d", landmark_id); 
+      Pose3 cam_pose;
+      if (pose_id == 0 || pose_id == 1) {
+        cam_pose = Pose3();
+      } else {
+        cam_pose = currentEstimate.at<Pose3>(Symbol('x', pose_id - 1));
+      }
       world_point = cam_pose.transform_from(camera_point); 
       values.insert(landmark, world_point);
-    } else {
-//      ROS_INFO("feature %d seen in previous frame", landmark_id);
     }
     
     // add factor from this frame's pose to the feature/landmark
     graph.emplace_shared<
       GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
         noise_model, Symbol('x', pose_id), landmark, K);
+        
+    // add prior to the landmark as well    
+    noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
+    graph.emplace_shared<PriorFactor<Point3> >(landmark, world_point, point_noise);
         
     return world_point;
   } 
