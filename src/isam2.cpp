@@ -86,8 +86,9 @@ private:
 
   // Initialize Factor Graph and Values Estimates on Nodes (continually updated by isam.update()) 
   NonlinearFactorGraph graph;
-  Values values;
-  Values currentEstimate; // current estimate of values
+  Values newNodes; // all node values to be added to graph
+  Values optimizedNodes; // current estimate of all previous node values
+  Pose3 prevCamPose; // current estimate of previous pose
 
   // Camera calibration intrinsics
   double f;
@@ -162,8 +163,13 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
-    // add node value for camera pose in current pose
-    values.insert(Symbol('x', pose_id), Pose3());
+    // add node value for camera pose in current pose based on previous pose
+    newNodes.insert(Symbol('x', pose_id), Pose3());
+    if (pose_id == 0 || pose_id == 1) {
+      prevCamPose = Pose3();
+    } else {
+      prevCamPose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
+    }
 
     // use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
@@ -194,14 +200,15 @@ public:
       noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
       graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
 
-      currentEstimate = values; // currentEstimate is actually just all the estimates right now
+      // indicate that all node values seen in pose 0 have been seen for next iteration 
+      optimizedNodes = newNodes; 
 
     } else {
     
       // update iSAM with new factors and node values from this pose
       
 //      ROS_INFO("before update step");
-      isam->update(graph, values); 
+      isam->update(graph, newNodes); 
 
       // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
       // If accuracy is desired at the expense of time, update(*) can be called additional times
@@ -209,13 +216,13 @@ public:
 //      isam->update();
 //      ROS_INFO("after update step");
 
-      // print estimated node values up to this point
-      currentEstimate = isam->calculateEstimate();
-      currentEstimate.print("Current estimate: ");
+      // update the node values that have been seen up to this point
+      optimizedNodes = isam->calculateEstimate();
+      optimizedNodes.print("Current estimate: ");
 
-      // Clear the objects holding new factors and node values for the next iteration
+      // clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
-      values.clear();
+      newNodes.clear();
     }
 
     pose_id++;
@@ -253,17 +260,11 @@ public:
     feature_cloud_msg_ptr->points.push_back(pcl_camera_point); 
 
 		// add node value for feature/landmark if it doesn't already exist
-		bool new_landmark = !currentEstimate.exists(Symbol('l', landmark_id));
+		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
 //      ROS_INFO("first time seeing feature %d", landmark_id); 
-      Pose3 cam_pose;
-      if (pose_id == 0 || pose_id == 1) {
-        cam_pose = Pose3();
-      } else {
-        cam_pose = currentEstimate.at<Pose3>(Symbol('x', pose_id - 1));
-      }
-      world_point = cam_pose.transform_from(camera_point); 
-      values.insert(landmark, world_point);
+      world_point = prevCamPose.transform_from(camera_point); 
+      newNodes.insert(landmark, world_point);
     }
     
     // add factor from this frame's pose to the feature/landmark
