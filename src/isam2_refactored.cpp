@@ -86,23 +86,19 @@ private:
 
   // Initialize Factor Graph and Values Estimates on Nodes (continually updated by isam.update()) 
   NonlinearFactorGraph graph;
-  Values values;
-  Values currentEstimate; // current estimate of values
+  Values newNodes; // all node values to be added to graph
+  Values optimizedNodes; // current estimate of all previous node values
+  Pose3 prevCamPose; // current estimate of previous pose
 
-  // Camera calibration intrinsics
-  double f;
-  double cx;
-  double cy;
-  
-  // Image distortion intrinsics
-  double resolution_x;
-  double resolution_y;
+  // Camera calibration, must give explicit allocation in class constructor (0's)
+  vector<double> cam0_intrinsics = vector<double>(4); 
+  vector<double> cam1_intrinsics = vector<double>(4);
+  vector<double> cam0_resolution = vector<double>(2);
+  vector<double> cam0_distortion_coeffs = vector<double>(4); // Image distortion coefficients
+  double Tx; // distance from cam0 to cam1 (extrinsic)
 
   // Camera calibration intrinsic matrix
-  Cal3_S2Stereo::shared_ptr K; 
-
-  // Camera calibration extrinsic
-  double Tx; // distance from cam0 to cam1
+  Cal3_S2Stereo::shared_ptr K;   
 
   // --> Camera observation noise model (has to do with IMU?)
   noiseModel::Isotropic::shared_ptr noise_model = noiseModel::Isotropic::Sigma(3, 1.0); // one pixel in u and v
@@ -117,18 +113,13 @@ public:
     // initialize PointCloud publisher
     this->feature_cloud_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud", 1000);
 
-    // YAML intrinsics (pinhole): [fu fv pu pv]
-    vector<double> cam0_intrinsics(4);
-    nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); // <- neglect right camera 
-    this->f = (cam0_intrinsics[0] + cam0_intrinsics[1]) / 2;
-    this->cx = cam0_intrinsics[2];  
-    this->cy = cam0_intrinsics[3];
+    // YAML intrinsics (pinhole): [fu fv pu pv] ([fx fy cx cy])
+    nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); // <- left camera 
+    nh_ptr->getParam("cam1/intrinsics", cam1_intrinsics); // <- right camera 
     
-    // YAML image resolution parameters (radtan): [k1 k2 r1 r2]
-    vector<double> cam0_resolution(2);
+    // YAML image distortion parameters (radtan): [k1 k2 r1 r2] ([radial then tan coefficients])
     nh_ptr->getParam("cam0/resolution", cam0_resolution); // <- neglect right camera
-    this->resolution_x =  cam0_resolution[0];
-    this->resolution_y =  cam0_resolution[1];
+    nh_ptr->getParam("cam0/distortion_coeffs", cam0_distortion_coeffs);
     
     // YAML extrinsics (distance between 2 cameras)
     vector<double> T_cam1(16);
@@ -138,7 +129,7 @@ public:
     
     // set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
-      this->cx, this->cy, -this->Tx));
+      cam0_intrinsics[2], cam0_intrinsics[3], -this->Tx));
     
     // iSAM2 settings
     ISAM2Params parameters;
@@ -155,8 +146,13 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
-    // add node value for camera pose in current pose
-    values.insert(Symbol('x', pose_id), Pose3());
+    // add node value for camera pose in current pose based on previous pose
+    newNodes.insert(Symbol('x', pose_id), Pose3());
+    if (pose_id == 0 || pose_id == 1) {
+      prevCamPose = Pose3();
+    } else {
+      prevCamPose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
+    }
 
     // use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
@@ -187,14 +183,15 @@ public:
       noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
       graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
 
-      currentEstimate = values; // currentEstimate is actually just all the estimates right now
+      // indicate that all node values seen in pose 0 have been seen for next iteration 
+      optimizedNodes = newNodes; 
 
     } else {
     
       // update iSAM with new factors and node values from this pose
       
 //      ROS_INFO("before update step");
-      isam->update(graph, values); 
+      isam->update(graph, newNodes); 
 
       // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
       // If accuracy is desired at the expense of time, update(*) can be called additional times
@@ -202,13 +199,13 @@ public:
 //      isam->update();
 //      ROS_INFO("after update step");
 
-      // print estimated node values up to this point
-      currentEstimate = isam->calculateEstimate();
-//      currentEstimate.print("Current estimate: ");
+      // update the node values that have been seen up to this point
+      optimizedNodes = isam->calculateEstimate();
+//      optimizedNodes.print("Current estimate: ");
 
-      // Clear the objects holding new factors and node values for the next iteration
+      // clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
-      values.clear();
+      newNodes.clear();
     }
 
     pose_id++;
@@ -225,10 +222,26 @@ public:
     // identify feature (may appear in previous/future frames) and mark as "seen"
     int landmark_id = feature.id;
     Symbol landmark = Symbol('l', landmark_id);
+    
+//    cv::Matx33d cam0_matrix(this->cam0_intrinsics[0], 0.0, this->cam0_intrinsics[2],
+//                               0.0, this->cam0_intrinsics[1], this->cam0_intrinsics[3],
+//                               0.0, 0.0, 1.0);
+//    cv::Matx33d cam1_matrix(this->cam1_intrinsics[0], 0.0, this->cam1_intrinsics[2],
+//                               0.0, this->cam1_intrinsics[1], this->cam1_intrinsics[3],
+//                               0.0, 0.0, 1.0);
+//    
+//    cv::stereoRectify(cam0_matrix, this->cam0_distortion_coeffs, 
+//                      cam1_matrix, this->cam0_distortion_coeffs, 
+//                      cam0_resolution, R, T, Mat::zeros(), R2, P1, P2, Q);
+    
+    double fx1 = this->cam0_intrinsics[0]; 
+    double fy1 = this->cam0_intrinsics[1];
+    double cx1 = this->cam0_intrinsics[2]; 
+    double cy1 = this->cam0_intrinsics[3];
 
-    double uL = (feature.u0 + 1) * 0.5 * resolution_x;
-    double uR = (feature.u1 + 1) * 0.5 * resolution_x ;
-    double v = ((feature.v0 + feature.v1) / 2.0 + 1) * 0.5 * resolution_y;
+    double uL = (feature.u0 + 1) * 0.5 * (double) this->cam0_resolution[0];
+    double uR = (feature.u1 + 1) * 0.5 * (double) this->cam0_resolution[0];
+    double v = ((feature.v0 + feature.v1) / 2.0 + 1) * 0.5 * (double) this->cam0_resolution[1];
 
     double d = uR - uL;
     double x = uL;
@@ -236,9 +249,9 @@ public:
     double W = d / this->Tx;
 
     // estimated feature location in camera frame
-    double X_camera = (x - cx) / W;
-    double Y_camera = (y - cy) / W;
-    double Z_camera = this->f / W; 
+    double X_camera = (x - cx1) / W;
+    double Y_camera = (y - cy1) / W;
+    double Z_camera = ((fx1 + fy1) / 2) / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
     // add location in camera frame to PointCloud
@@ -246,17 +259,13 @@ public:
     feature_cloud_msg_ptr->points.push_back(pcl_camera_point); 
 
 		// add node value for feature/landmark if it doesn't already exist
-		bool new_landmark = !currentEstimate.exists(Symbol('l', landmark_id));
+		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
-//      ROS_INFO("first time seeing feature %d", landmark_id); 
       Pose3 cam_pose;
-      if (pose_id == 0 || pose_id == 1) {
-        cam_pose = Pose3();
-      } else {
-        cam_pose = currentEstimate.at<Pose3>(Symbol('x', pose_id - 1));
-      }
-      world_point = cam_pose.transform_from(camera_point); 
-      values.insert(landmark, world_point);
+//      ROS_INFO("first time seeing feature %d", landmark_id); 
+//      world_point = prevCamPose.transform_from(camera_point); 
+      world_point = cam_pose.transform_from(camera_point);
+      newNodes.insert(landmark, world_point);
     }
     
     // add factor from this frame's pose to the feature/landmark
@@ -266,7 +275,7 @@ public:
         
     // add prior to the landmark as well    
     noiseModel::Isotropic::shared_ptr point_noise = noiseModel::Isotropic::Sigma(3, 0.1);
-    graph.emplace_shared<PriorFactor<Point3> >(landmark, world_point, point_noise);
+    graph.emplace_shared< PriorFactor<Point3> >(landmark, world_point, point_noise);
         
     return world_point;
   } 
@@ -296,3 +305,4 @@ int main(int argc, char **argv) {
 
   return 0;
 }
+
