@@ -1,4 +1,4 @@
-// SUBSCRIBER NODE ("isam2_imu") <-- intended to eventually be integrated into isam2.cpp
+// SUBSCRIBER NODE ("isam2_imu") <-- TODO: integrate extra lines marked by // ** into isam2.cpp
 
 // ROS/PACKAGE INCLUDES
 /* ************************************************************************* */
