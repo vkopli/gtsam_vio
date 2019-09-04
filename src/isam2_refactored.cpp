@@ -239,9 +239,9 @@ public:
     double cx1 = this->cam0_intrinsics[2]; 
     double cy1 = this->cam0_intrinsics[3];
 
-    double uL = (feature.u0 + 1) * 0.5 * (double) this->cam0_resolution[0];
-    double uR = (feature.u1 + 1) * 0.5 * (double) this->cam0_resolution[0];
-    double v = ((feature.v0 + feature.v1) / 2.0 + 1) * 0.5 * (double) this->cam0_resolution[1];
+    double uL = (feature.u0 + 1) * 0.5 * this->cam0_resolution[0];
+    double uR = (feature.u1 + 1) * 0.5 * this->cam0_resolution[0];
+    double v = ((feature.v0 + feature.v1) / 2.0 + 1) * 0.5 * this->cam0_resolution[1];
 
     double d = uR - uL;
     double x = uL;
@@ -263,7 +263,6 @@ public:
     if (new_landmark) {
       Pose3 cam_pose;
 //      ROS_INFO("first time seeing feature %d", landmark_id); 
-//      world_point = prevCamPose.transform_from(camera_point); 
       world_point = cam_pose.transform_from(camera_point);
       newNodes.insert(landmark, world_point);
     }
