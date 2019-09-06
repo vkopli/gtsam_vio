@@ -88,9 +88,12 @@ private:
   NonlinearFactorGraph graph;
   Values newNodes;
   Values optimizedNodes; // current estimate of values
+  Pose3 prevOptimizedPose; // current estimate of previous pose
   
-  // Publish PointCloud messages
-  ros::Publisher feature_cloud_pub; 
+//  // Covariance Matrices (constant over time)
+//  boost::array<double, 9> orient_cov;
+//  boost::array<double, 9> ang_vel_cov;
+//  boost::array<double, 9> lin_acc_cov;
 
 public:
  
@@ -106,25 +109,28 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
-    // add node value for camera pose in current pose based on previous pose
-    newNodes.insert(Symbol('x', pose_id), Pose3());
+    // add node value for current pose based on previous pose
+    if (pose_id == 0 || pose_id == 1) {
+      prevOptimizedPose = Pose3();
+    } else {
+      prevOptimizedPose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
+    } 
+    newNodes.insert(Symbol('x', pose_id), prevOptimizedPose);
     
     // get imu orientation, angualar velocity, and linear acceleration // **
-    Quaternion orient = imu_msg->orientation; 
-    Vector3 ang_vel = imu_msg->angular_velocity;
-    Vector3 lin_acc = imu_msg->linear_acceleration; 
-    double orientation[] = {orient.x, orient.y, orient.z, orient.w}; // quaternion
-    double angular_velocity[] = {ang_vel.x, ang_vel.y, ang_vel.z}; 
-    double linear_acceleration[] = {lin_acc.x, lin_acc.y, lin_acc.z};
+    geometry_msgs::Quaternion orient = imu_msg->orientation; // fields: x, y, z, w
+    geometry_msgs::Vector3 ang_vel = imu_msg->angular_velocity; // fields: x, y, z
+    geometry_msgs::Vector3 lin_acc = imu_msg->linear_acceleration; // fields: x, y, z
+        
+    // covariance of all of the above, constant over time (row major about x, y, z axes) // **
+    boost::array<double, 9> orient_cov = imu_msg->orientation_covariance;
+    boost::array<double, 9> ang_vel_cov = imu_msg->angular_velocity_covariance;
+    boost::array<double, 9> lin_acc_cov = imu_msg->linear_acceleration_covariance;
     
-    // covariance of all of the above (row major about x, y, z axes) // **
-    double orientation_covariance[9] = imu_msg.orientation_covariance;
-    double angular_velocity_covariance[9] = imu_msg.angular_velocity_covariance;
-    double linear_acceleration_covariance[9] = imu_msg.linear_acceleration_covariance;
-    
-    ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
-    ROS_INFO("orientation: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
-      cam0_intrinsics[2], cam0_intrinsics[3]);
+    ROS_INFO("orientation: %f, %f, %f, %f", orient.x, orient.y, orient.z, orient.w);
+    ROS_INFO("ang_vel: %f, %f, %f", ang_vel.x, ang_vel.y, ang_vel.z);
+    ROS_INFO("lin_acc: %f, %f, %f", lin_acc.x, lin_acc.y, lin_acc.z);
+    ROS_INFO("orientation covariance: %f, %f, %f; %f, %f, %f; %f, %f, %f", orient_cov[0], orient_cov[1], orient_cov[2], orient_cov[3], orient_cov[4], orient_cov[5],orient_cov[6], orient_cov[7], orient_cov[8]);
           
     if (pose_id == 0) {
 

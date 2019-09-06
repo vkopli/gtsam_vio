@@ -261,9 +261,8 @@ public:
 		// add node value for feature/landmark if it doesn't already exist
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
-      Pose3 cam_pose;
 //      ROS_INFO("first time seeing feature %d", landmark_id); 
-      world_point = cam_pose.transform_from(camera_point);
+      world_point = prevCamPose.transform_from(camera_point);
       newNodes.insert(landmark, world_point);
     }
     

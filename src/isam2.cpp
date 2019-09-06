@@ -88,6 +88,7 @@ private:
   NonlinearFactorGraph graph;
   Values newNodes;
   Values optimizedNodes; // current estimate of values
+  Pose3 prevOptimizedPose; // current estimate of previous pose
 
   // Camera calibration intrinsics
   double f;
@@ -155,8 +156,13 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
-    // add node value for camera pose in current pose based on previous pose
-    newNodes.insert(Symbol('x', pose_id), Pose3());
+    // add node value for current pose based on previous pose
+    if (pose_id == 0 || pose_id == 1) {
+      prevOptimizedPose = Pose3();
+    } else {
+      prevOptimizedPose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
+    } 
+    newNodes.insert(Symbol('x', pose_id), prevOptimizedPose);
 
     // use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
@@ -165,9 +171,7 @@ public:
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
-
-      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr);
-      
+      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr, prevOptimizedPose);
     }
     
     // publish feature PointCloud messages
@@ -210,6 +214,12 @@ public:
       // clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
       newNodes.clear();
+            
+//      // print isam graph after some number of iterations (causes segmentation fault, so comment out)
+//      if (pose_id == 10) {
+//        // print graph to graphviz dot file (render to PDF using "fdp filname.dot -Tpdf > filename.pdf")
+//        isam->saveGraph("VisualISAMGraph_10pose_2019-09-05.dot"); 
+//      }
     }
 
     pose_id++;
@@ -217,9 +227,10 @@ public:
 
 
   // add node for feature if not already there and connect to current pose with a factor
-  // add estimated world coordinate of feature to PointCloud 
+  // add estimated world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
-                      pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr) {
+                      pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr,
+                      Pose3 prevOptimizedPose) {
 
     Point3 world_point;
 
@@ -250,13 +261,7 @@ public:
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
 //      ROS_INFO("first time seeing feature %d", landmark_id); 
-      Pose3 cam_pose;
-      if (pose_id == 0 || pose_id == 1) {
-        cam_pose = Pose3();
-      } else {
-        cam_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
-      }
-      world_point = cam_pose.transform_from(camera_point); 
+      world_point = prevOptimizedPose.transform_from(camera_point); 
       newNodes.insert(landmark, world_point);
     }
     
