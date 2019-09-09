@@ -97,9 +97,6 @@ private:
   Vector3 prevOptimizedVelocity;
   imuBias::ConstantBias prevOptimizedBias;
   PreintegratedCombinedMeasurements* preint_imu_combined;
-  NavState prev_state; // previous state for the imu integration
-  NavState prop_state; // current estimate of state
-  imuBias::ConstantBias prev_bias;
   
   // Noise models // ** (pose_noise is a duplicate variable)
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished()); // rad,rad,rad,m, m, m
@@ -155,12 +152,7 @@ public:
       p->biasAccCovariance = Matrix33::Identity(3,3) *  1e-5; // acc bias in continuous
       p->biasOmegaCovariance = Matrix33::Identity(3,3) * 1e-5;; // gyro bias in continuous
       p->biasAccOmegaInt = Matrix::Identity(6,6) * 1e-5; // error in the bias used for preintegration
-      
-      // Set IMU Variables
       preint_imu_combined = new PreintegratedCombinedMeasurements(p, imuBias::ConstantBias());
-      prev_state = NavState(Pose3(), Vector3()); // assume 0 prior pose and velocity
-      prop_state = prev_state; 
-      prev_bias = imuBias::ConstantBias(); // assume 0 initial bias 
       
     }
               
@@ -177,11 +169,6 @@ public:
     newNodes.insert(Symbol('x', pose_id), prevOptimizedPose);
     newNodes.insert(Symbol('v', pose_id), prevOptimizedVelocity);
     newNodes.insert(Symbol('b', pose_id), prevOptimizedBias);
-    
-    // Add IMU node with initial estimate for current pose based on previous pose
-//    newNodes.insert(Symbol('x', pose_id), prior_pose);
-//    newNodes.insert(Symbol('v', pose_id), prior_velocity);
-//    newNodes.insert(Symbol('b', pose_id), prior_imu_bias); 
             
     // Get IMU orientation, angular vel, and linear acc // **
     geometry_msgs::Quaternion orient = imu_msg->orientation; // fields: x, y, z, w
