@@ -136,6 +136,10 @@ add_executable(isam2 src/isam2.cpp)
 target_link_libraries(isam2 ${catkin_LIBRARIES} gtsam)
 add_dependencies(isam2 legged_vio_generate_messages_cpp)
 
+# ISAM2 vision node
+add_executable(isam2_vio src/isam2_vio.cpp)
+target_link_libraries(isam2_vio ${catkin_LIBRARIES} gtsam)
+add_dependencies(isam2_vio legged_vio_generate_messages_cpp)
 
 # ISAM2 IMU node (TODO: integrate IMU node into ISAM2 node, make into nodelet, and move IMU launch params from image_processor_nodelet to new nodelet)
 add_executable(isam2_imu src/isam2_imu.cpp)

@@ -166,7 +166,7 @@ public:
         dt                                        // time between measurements
       ); 
       
-      // Add factors between previous and current state for current IMU measurement (COMMENTING OUT prevents errors) // **      
+      // Add factors between previous and current state for current IMU measurement // **      
       graph.emplace_shared<ImuFactor>(
         Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
         Symbol('x', pose_id    ), Symbol('v', pose_id    ),
