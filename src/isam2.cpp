@@ -90,7 +90,7 @@ private:
   Values optimizedNodes; // current estimate of values
     
   // Initialize VIO Variables
-  Pose3 prevOptimizedPose; // current estimate of previous pose
+  Pose3 prev_optimized_pose; // current estimate of previous pose
   
   // Noise models
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
@@ -160,13 +160,13 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
 
-    // Add node value for current pose based on previous pose
+    // Add node value for current pose with initial estimate being previous pose
     if (pose_id == 0 || pose_id == 1) {
-      prevOptimizedPose = Pose3();
+      prev_optimized_pose = Pose3();
     } else {
-      prevOptimizedPose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
+      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
     } 
-    newNodes.insert(Symbol('x', pose_id), prevOptimizedPose);
+    newNodes.insert(Symbol('x', pose_id), prev_optimized_pose);
 
     // Use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
@@ -175,7 +175,7 @@ public:
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
-      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr, prevOptimizedPose);
+      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr, prev_optimized_pose);
     }
     
     // Publish feature PointCloud messages
@@ -199,16 +199,21 @@ public:
 
     } else {
     
-      // Update iSAM with new factors and node values from this pose
+      // UPDATE ISAM WITH NEW FACTORS AND NODES FROM THIS POSE 
       
-//      ROS_INFO("before update step");
       isam->update(graph, newNodes); 
+      
+//      // Print graph to graphviz dot file (render to PDF using "fdp filname.dot -Tpdf > filename.pdf")
+//      if (pose_id == 1) {
+//        ofstream os("/home/vkopli/Documents/GRASP/Graphs/VisualISAMActualGraph_1pose_2019-09-18.dot");
+//        graph.saveGraph(os, newNodes);
+//        isam->saveGraph("/home/vkopli/Documents/GRASP/Graphs/VisualISAMGraph_1pose_2019-09-05.dot"); 
+//      }
 
       // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
       // If accuracy is desired at the expense of time, update(*) can be called additional times
       // to perform multiple optimizer iterations every step.
 //      isam->update();
-//      ROS_INFO("after update step");
 
       // Update the node values that have been seen up to this point
       optimizedNodes = isam->calculateEstimate();
@@ -217,12 +222,6 @@ public:
       // Clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
       newNodes.clear();
-            
-//      // Print isam graph after some number of iterations (causes segmentation fault, so comment out)
-//      if (pose_id == 10) {
-//        // Print graph to graphviz dot file (render to PDF using "fdp filname.dot -Tpdf > filename.pdf")
-//        isam->saveGraph("VisualISAMGraph_10pose_2019-09-05.dot"); 
-//      }
     }
 
     pose_id++;
@@ -233,7 +232,7 @@ public:
   // Add estimated world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
                       pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr,
-                      Pose3 prevOptimizedPose) {
+                      Pose3 prev_optimized_pose) {
 
     Point3 world_point;
 
@@ -264,7 +263,7 @@ public:
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
 //      ROS_INFO("first time seeing feature %d", landmark_id); 
-      world_point = prevOptimizedPose.transform_from(camera_point); 
+      world_point = prev_optimized_pose.transform_from(camera_point); 
       newNodes.insert(landmark, world_point);
     }
     

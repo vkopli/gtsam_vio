@@ -22,6 +22,7 @@
 
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/geometry/Cal3_S2Stereo.h>
+#include <gtsam/navigation/ImuFactor.h>
 #include <gtsam/navigation/CombinedImuFactor.h>
 
 // Each variable in the system (poses and landmarks) must be identified with a unique key.
@@ -43,6 +44,7 @@
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/StereoFactor.h>
 #include <gtsam/slam/ProjectionFactor.h>
+#include <gtsam/slam/BetweenFactor.h>
 
 // ADDITIONAL INCLUDES
 /* ************************************************************************* */
@@ -52,6 +54,8 @@
 #include <memory>
 #include <map>
 #include <opencv2/opencv.hpp>
+
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 
 using namespace std;
 using namespace message_filters;
@@ -91,15 +95,18 @@ private:
   Values optimizedNodes; // current estimate of values
   
   // Initialize VIO Variables
-  Pose3 prevOptimizedPose; // current estimate of previous pose
+  Pose3 prev_optimized_pose; // current estimate of previous pose
   
   // Initialize IMU Variables // **
-  Vector3 prevOptimizedVelocity;
-  imuBias::ConstantBias prevOptimizedBias;
-  PreintegratedCombinedMeasurements* preint_imu_combined;
+  Vector3 prev_optimized_velocity;
+  imuBias::ConstantBias prev_optimized_bias;
+  PreintegratedImuMeasurements* imu_preintegrated; // CHANGE BACK TO COMBINED (Combined<->Imu)
+  ros::Time prev_imu_timestamp;
   
   // Noise models // ** (pose_noise is a duplicate variable)
-  noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished()); // rad,rad,rad,m, m, m
+  noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas(
+    (Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished() // rad,rad,rad,m, m, m
+  );
   noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3,0.1); // m/s
   noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6,1e-3);
   
@@ -117,99 +124,137 @@ public:
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
-          
-    // Set up IMU priors // **
-    if (pose_id == 0) {
-    
-      // Get (constant) IMU covariance of orientation, angular vel, and linear acc (row major about x, y, z axes)
-      boost::array<double, 9> orient_cov = imu_msg->orientation_covariance;
-      boost::array<double, 9> ang_vel_cov = imu_msg->angular_velocity_covariance;
-      boost::array<double, 9> lin_acc_cov = imu_msg->linear_acceleration_covariance;
-      
-      // Convert covariances to matrix form (Eigen::Matrix<float, 3, 3>)
-      gtsam::Matrix3 orient_cov_mat;
-      gtsam::Matrix3 ang_vel_cov_mat;
-      gtsam::Matrix3 lin_acc_cov_mat;
-      orient_cov_mat << orient_cov[0], orient_cov[1], orient_cov[2], orient_cov[3], orient_cov[4], 
-                        orient_cov[5],orient_cov[6], orient_cov[7], orient_cov[8];
-      ang_vel_cov_mat << ang_vel_cov[0], ang_vel_cov[1], ang_vel_cov[2], ang_vel_cov[3], ang_vel_cov[4], 
-                         ang_vel_cov[5],ang_vel_cov[6], ang_vel_cov[7], ang_vel_cov[8];
-      lin_acc_cov_mat << lin_acc_cov[0], lin_acc_cov[1], lin_acc_cov[2], lin_acc_cov[3], lin_acc_cov[4], 
-                         lin_acc_cov[5],lin_acc_cov[6], lin_acc_cov[7], lin_acc_cov[8];   
-      std::cout << "Orientation Covariance Matrix: " << std::endl << orient_cov_mat << std::endl; 
-      std::cout << "Angular Velocity Covariance Matrix: " << std::endl << ang_vel_cov_mat << std::endl; 
-      std::cout << "Linear Acceleration Covariance Matrix: " << std::endl << lin_acc_cov_mat << std::endl; 
-      
-      // Assign IMU priors
-      boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p = PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0);
-      // PreintegrationBase params:
-      p->accelerometerCovariance = lin_acc_cov_mat; // acc white noise in continuous
-      p->integrationCovariance = orient_cov_mat; // integration uncertainty continuous
-      // should be using 2nd order integration
-      // PreintegratedRotation params:
-      p->gyroscopeCovariance = ang_vel_cov_mat; // gyro white noise in continuous
-      // PreintegrationCombinedMeasurements params:
-      p->biasAccCovariance = Matrix33::Identity(3,3) *  1e-5; // acc bias in continuous
-      p->biasOmegaCovariance = Matrix33::Identity(3,3) * 1e-5;; // gyro bias in continuous
-      p->biasAccOmegaInt = Matrix::Identity(6,6) * 1e-5; // error in the bias used for preintegration
-      preint_imu_combined = new PreintegratedCombinedMeasurements(p, imuBias::ConstantBias());
-      
-    }
-              
-    // Add node value for current pose based on previous pose // ** (prevOptimizedPose is duplicate variable)
-    if (pose_id == 0 || pose_id == 1) {
-      prevOptimizedPose = Pose3();
-      prevOptimizedVelocity = Vector3();
-      prevOptimizedBias = imuBias::ConstantBias();
-    } else {
-      prevOptimizedPose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
-      prevOptimizedVelocity = optimizedNodes.at<Vector3>(Symbol('v', pose_id - 1));
-      prevOptimizedBias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id - 1));
-    } 
-    newNodes.insert(Symbol('x', pose_id), prevOptimizedPose);
-    newNodes.insert(Symbol('v', pose_id), prevOptimizedVelocity);
-    newNodes.insert(Symbol('b', pose_id), prevOptimizedBias);
             
     // Get IMU orientation, angular vel, and linear acc // **
     geometry_msgs::Quaternion orient = imu_msg->orientation; // fields: x, y, z, w
     geometry_msgs::Vector3 ang_vel = imu_msg->angular_velocity; // fields: x, y, z
     geometry_msgs::Vector3 lin_acc = imu_msg->linear_acceleration; // fields: x, y, z
     
-    ROS_INFO("orientation: %f, %f, %f, %f", orient.x, orient.y, orient.z, orient.w);
-    ROS_INFO("angular velocity: %f, %f, %f", ang_vel.x, ang_vel.y, ang_vel.z);
-    ROS_INFO("linear acceleration: %f, %f, %f", lin_acc.x, lin_acc.y, lin_acc.z);
+//    ROS_INFO("orientation: %f, %f, %f, %f", orient.x, orient.y, orient.z, orient.w);
+//    ROS_INFO("angular velocity: %f, %f, %f", ang_vel.x, ang_vel.y, ang_vel.z);
+//    ROS_INFO("linear acceleration: %f, %f, %f", lin_acc.x, lin_acc.y, lin_acc.z);
 
     if (pose_id == 0) {
+    
+      initializeIMUParameters(imu_msg); // initializes imu_preintegrated // **
 
-      // Add prior on pose x0 (zero pose is used to set world frame)
-      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
+      // Add priors (pose, velocity, and bias) // ** (altered from isam2.cpp)
+      Rot3 prior_rotation = Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w); // quaternion -> Rot3
+      Pose3 prior_pose(prior_rotation, Point3(0,0,0)); // start at origin with IMU's starting rotation
+      newNodes.insert(Symbol('x', 0), prior_pose);
+      newNodes.insert(Symbol('v', 0), Vector3(0, 0, 0));
+      newNodes.insert(Symbol('b', 0), imuBias::ConstantBias());
+      graph.emplace_shared< PriorFactor<Pose3> >(Symbol('x', 0), prior_pose, pose_noise);
+      graph.emplace_shared< PriorFactor<Vector3> >(Symbol('v', 0), Vector3(), velocity_noise);
+      graph.emplace_shared< PriorFactor<imuBias::ConstantBias> >(Symbol('b', 0), imuBias::ConstantBias(), bias_noise);
 
       // Indicate that all node values seen in pose 0 have been seen for next iteration 
       optimizedNodes = newNodes; 
 
     } else {
     
-      // Update iSAM with new factors and node values from this pose
+      // Get previous optimized nodes // **
+      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
+      prev_optimized_velocity = optimizedNodes.at<Vector3>(Symbol('v', pose_id - 1));
+      prev_optimized_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id - 1));
       
-//      ROS_INFO("before update step");
-      isam->update(graph, newNodes); 
+      // Integrate current reading from IMU // **
+      double dt = (imu_msg->header.stamp - prev_imu_timestamp).toSec();
+      imu_preintegrated->integrateMeasurement(
+        Vector3(lin_acc.x, lin_acc.y, lin_acc.z), // measuredAcc
+        Vector3(ang_vel.x, ang_vel.y, ang_vel.z), // measuredOmega
+        dt                                        // time between measurements
+      ); 
+      
+      // Add factors between previous and current state for current IMU measurement (COMMENTING OUT prevents errors) // **      
+      graph.emplace_shared<ImuFactor>(
+        Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
+        Symbol('x', pose_id    ), Symbol('v', pose_id    ),
+        Symbol('b', pose_id - 1), *imu_preintegrated     
+      );
+      imuBias::ConstantBias zero_bias(Vector3(0, 0, 0), Vector3(0, 0, 0));
+      graph.emplace_shared< BetweenFactor<imuBias::ConstantBias> >(
+        Symbol('b', pose_id - 1), 
+        Symbol('b', pose_id    ), 
+        zero_bias, 
+        bias_noise
+      );
+//      graph.emplace_shared<CombinedImuFactor>(
+//        Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
+//        Symbol('x', pose_id    ), Symbol('v', pose_id    ),
+//        Symbol('b', pose_id - 1), Symbol('b', pose_id    ),
+//        *imu_preintegrated
+//      );
+  
+      // Predict initial estimates for current state // **
+      NavState prev_optimized_state = NavState(prev_optimized_pose, prev_optimized_velocity);
+      NavState propagated_state = imu_preintegrated->predict(prev_optimized_state, prev_optimized_bias);
+      newNodes.insert(Symbol('x', pose_id), propagated_state.pose()); 
+      newNodes.insert(Symbol('v', pose_id), propagated_state.v()); 
+      newNodes.insert(Symbol('b', pose_id), prev_optimized_bias); 
 
-      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
-      // If accuracy is desired at the expense of time, update(*) can be called additional times
-      // to perform multiple optimizer iterations every step.
+      // UPDATE ISAM WITH NEW FACTORS AND NODES FROM THIS POSE 
+      isam->update(graph, newNodes); 
+      
+//      // Print graph to graphviz dot file (render to PDF using "fdp filname.dot -Tpdf > filename.pdf")
+//      if (pose_id == 2) {
+//        ofstream os("/home/vkopli/Documents/GRASP/Graphs/VisualISAMActualGraphIMU_2pose_2019-09-18.dot");
+//        graph.saveGraph(os, newNodes);
+//        isam->saveGraph("/home/vkopli/Documents/GRASP/Graphs/VisualISAMGraphIMU_2pose_2019-09-18.dot");
+//      }
+
+//      // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
+//      // If accuracy is desired at the expense of time, update(*) can be called additional times
+//      // to perform multiple optimizer iterations every step.
 //      isam->update();
-//      ROS_INFO("after update step");
+//      ROS_INFO("after second update step");
 
       // Update the node values that have been seen up to this point
-      optimizedNodes = isam->calculateEstimate();
-//      optimizedNodes.print("Current estimate: ");
+      optimizedNodes = isam->calculateEstimate(); // Indeterminant linear system detected while working near variable (Symbol: b0)
+      optimizedNodes.print("Current estimate: ");
 
       // Clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
       newNodes.clear();
+
+       // Reset the IMU preintegration object // **
+      imu_preintegrated->resetIntegrationAndSetBias(prev_optimized_bias); 
     }
 
+    prev_imu_timestamp = imu_msg->header.stamp;
     pose_id++;
+  }
+  
+  void initializeIMUParameters(const ImuConstPtr& imu_msg) { // **
+    
+    // Get (constant) IMU covariance of orientation, angular vel, and linear acc (row major about x, y, z axes)
+    boost::array<double, 9> orient_cov = imu_msg->orientation_covariance;
+    boost::array<double, 9> ang_vel_cov = imu_msg->angular_velocity_covariance;
+    boost::array<double, 9> lin_acc_cov = imu_msg->linear_acceleration_covariance;
+    
+    // Convert covariances to matrix form (Eigen::Matrix<float, 3, 3>)
+    gtsam::Matrix3 orient_cov_mat;
+    gtsam::Matrix3 ang_vel_cov_mat;
+    gtsam::Matrix3 lin_acc_cov_mat;
+    orient_cov_mat << orient_cov[0], orient_cov[1], orient_cov[2], orient_cov[3], orient_cov[4], 
+                      orient_cov[5],orient_cov[6], orient_cov[7], orient_cov[8];
+    ang_vel_cov_mat << ang_vel_cov[0], ang_vel_cov[1], ang_vel_cov[2], ang_vel_cov[3], ang_vel_cov[4], 
+                       ang_vel_cov[5],ang_vel_cov[6], ang_vel_cov[7], ang_vel_cov[8];
+    lin_acc_cov_mat << lin_acc_cov[0], lin_acc_cov[1], lin_acc_cov[2], lin_acc_cov[3], lin_acc_cov[4], 
+                       lin_acc_cov[5],lin_acc_cov[6], lin_acc_cov[7], lin_acc_cov[8];   
+    std::cout << "Orientation Covariance Matrix (not used): " << std::endl << orient_cov_mat << std::endl; 
+    std::cout << "Angular Velocity Covariance Matrix: " << std::endl << ang_vel_cov_mat << std::endl; 
+    std::cout << "Linear Acceleration Covariance Matrix: " << std::endl << lin_acc_cov_mat << std::endl; 
+    
+    // Assign IMU preintegration parameters 
+    boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p =  PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0); 
+    p->accelerometerCovariance = lin_acc_cov_mat; //Matrix33::Identity(3,3) * pow(0.0003924,2);
+    p->integrationCovariance = Matrix33::Identity(3,3)*1e-8; //orient_cov_mat; (DON'T USE "orient_cov_mat": ALL ZEROS)
+    p->gyroscopeCovariance = ang_vel_cov_mat; //Matrix33::Identity(3,3) * pow(0.000205689024915,2); 
+    p->biasAccCovariance = Matrix33::Identity(3,3) * pow(0.004905,2); //Matrix33::Identity(3,3) *  1e-5; 
+    p->biasOmegaCovariance = Matrix33::Identity(3,3) * pow(0.000001454441043,2); //Matrix33::Identity(3,3) * 1e-5;; 
+    p->biasAccOmegaInt = Matrix::Identity(6,6)*1e-5; //Matrix::Identity(6,6) * 1e-5; 
+    imu_preintegrated = new PreintegratedImuMeasurements(p, imuBias::ConstantBias()); // CHANGE BACK TO COMBINED (Combined<->Imu)
   }
 
 };
