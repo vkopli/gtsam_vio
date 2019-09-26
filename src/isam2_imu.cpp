@@ -140,23 +140,20 @@ public:
 
       // Add priors (pose, velocity, and bias) // ** (altered from isam2.cpp)
       Rot3 prior_rotation = Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w); // quaternion -> Rot3
-      Pose3 prior_pose(prior_rotation, Point3(0,0,0)); // start at origin with IMU's starting rotation
-      newNodes.insert(Symbol('x', 0), prior_pose);
-      newNodes.insert(Symbol('v', 0), Vector3(0, 0, 0));
-      newNodes.insert(Symbol('b', 0), imuBias::ConstantBias());
-      graph.emplace_shared< PriorFactor<Pose3> >(Symbol('x', 0), prior_pose, pose_noise);
-      graph.emplace_shared< PriorFactor<Vector3> >(Symbol('v', 0), Vector3(), velocity_noise);
-      graph.emplace_shared< PriorFactor<imuBias::ConstantBias> >(Symbol('b', 0), imuBias::ConstantBias(), bias_noise);
+      prev_optimized_pose = Pose3(prior_rotation, Point3(0,0,0)); // start at origin with IMU's starting rotation
+      prev_optimized_velocity = Vector3();
+      prev_optimized_bias = imuBias::ConstantBias();
+      newNodes.insert(Symbol('x', 0), prev_optimized_pose);
+      newNodes.insert(Symbol('v', 0), prev_optimized_velocity);
+      newNodes.insert(Symbol('b', 0), prev_optimized_bias);
+      graph.emplace_shared< PriorFactor<Pose3> >(Symbol('x', 0), prev_optimized_pose, pose_noise);
+      graph.emplace_shared< PriorFactor<Vector3> >(Symbol('v', 0), prev_optimized_velocity, velocity_noise);
+      graph.emplace_shared< PriorFactor<imuBias::ConstantBias> >(Symbol('b', 0), prev_optimized_bias, bias_noise);
 
-      // Indicate that all node values seen in pose 0 have been seen for next iteration 
-      optimizedNodes = newNodes; 
+      //** "optimizedNodes = newNodes;" (deleted from isam2.cpp)
+      
 
     } else {
-    
-      // Get previous optimized nodes // **
-      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
-      prev_optimized_velocity = optimizedNodes.at<Vector3>(Symbol('v', pose_id - 1));
-      prev_optimized_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id - 1));
       
       // Integrate current reading from IMU // **
       double dt = (imu_msg->header.stamp - prev_imu_timestamp).toSec();
@@ -219,6 +216,11 @@ public:
 
        // Reset the IMU preintegration object // **
       imu_preintegrated->resetIntegrationAndSetBias(prev_optimized_bias); 
+          
+      // Get optimized nodes for next iteration // ** (moved and altered from isam2.cpp)
+      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
+      prev_optimized_velocity = optimizedNodes.at<Vector3>(Symbol('v', pose_id));
+      prev_optimized_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id));
     }
 
     prev_imu_timestamp = imu_msg->header.stamp;
