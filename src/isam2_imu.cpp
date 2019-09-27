@@ -12,6 +12,7 @@
 #include <legged_vio/CameraMeasurement.h>
 #include <sensor_msgs/Imu.h>
 #include <tf/transform_broadcaster.h>
+#include <tf_conversions/tf_eigen.h>
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_ros/point_cloud.h>
@@ -72,8 +73,6 @@ struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
   string imu_topic_id = "/zed/imu/data_raw"; // "/imu0" for euroc data
   string camera_frame_id = "zed_left_camera_optical_frame"; // "map" for euroc data
-  string fixed_frame_id = "world";
-  string child_frame_id = "robot";
 };
 
 // CALLBACK WRAPPER CLASS
@@ -227,18 +226,22 @@ public:
       prev_optimized_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id));
     }
 
-    publishTf(prev_optimized_pose, prev_optimized_velocity, prev_optimized_bias);
-
     prev_imu_timestamp = imu_msg->header.stamp;
     pose_id++;
+    
+    publishTf(prev_optimized_pose, prev_imu_timestamp);
   }
   
-  void publishTf(Pose3 &prev_optimized_pose, Vector3 &prev_optimized_velocity, 
-    imuBias::ConstantBias &prev_optimized_bias) {
-//    tf::Transform T_b_w_gt_tf;
-//    tf::transformEigenToTF(T_b_w_gt, T_b_w_gt_tf);
-//    tf_pub.sendTransform(tf::StampedTransform(
-//          T_b_w_gt_tf, ros::Time::now(), fixed_frame_id, child_frame_id));
+  void publishTf(Pose3 &prev_optimized_pose, ros::Time &imu_timestamp) {
+    
+    tf::Quaternion q_tf;
+    tf::Vector3 t_tf;
+    tf::quaternionEigenToTF(prev_optimized_pose.rotation().toQuaternion(), q_tf);
+    tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
+    tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
+//    tf::transformEigenToTF(T_b_w_gt, world_to_imu_tf);
+    tf_pub.sendTransform(tf::StampedTransform(
+          world_to_imu_tf, imu_timestamp, "world", "robot"));
   }
   
   void initializeIMUParameters(const ImuConstPtr& imu_msg) { // **
