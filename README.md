@@ -16,4 +16,3 @@ using ZED dataset (Kalibr data, not publicly available):
 - rosrun legged_vio isam2 (isam2_vio if running on just camera, isam2_imu if running on just imu)
 - rviz ~/catkin_ws/src/legged_vio/rviz/rviz_zed_config.rviz (visualize isam2/isam2_vio)
 - rosbag play ~/bagfiles/Kalibr_data.bag (requires the bagfile to be downloaded)
-
