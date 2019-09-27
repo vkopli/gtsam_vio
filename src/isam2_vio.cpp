@@ -61,10 +61,11 @@ using namespace gtsam;
 // PARAMETERS TO SPECIFY FOR OTHER NODES
 /* ************************************************************************* */
 
+// can't use remapped topic names from image_processor_zed.launch bc not using same NodeHandle
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
   string imu_topic_id = "/zed/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
-  string fixed_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
+  string camera_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
 };
 
 // CALLBACK WRAPPER CLASS
@@ -179,7 +180,7 @@ public:
     }
     
     // Publish feature PointCloud messages
-    feature_cloud_msg_ptr->header.frame_id = lv.fixed_frame_id;
+    feature_cloud_msg_ptr->header.frame_id = lv.camera_frame_id;
     feature_cloud_msg_ptr->height = 1;
     feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
     this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 

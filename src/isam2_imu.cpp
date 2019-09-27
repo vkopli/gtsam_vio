@@ -66,10 +66,13 @@ using namespace gtsam;
 // PARAMETERS TO SPECIFY FOR OTHER NODES
 /* ************************************************************************* */
 
+// can't use remapped topic names from image_processor_zed.launch bc not using same NodeHandle
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
-  string imu_topic_id = "/zed/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
-  string fixed_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
+  string imu_topic_id = "/zed/imu/data_raw"; // "/imu0" for euroc data
+  string camera_frame_id = "zed_left_camera_optical_frame"; // "map" for euroc data
+  string fixed_frame_id = "world";
+  string child_frame_id = "robot";
 };
 
 // CALLBACK WRAPPER CLASS
@@ -223,8 +226,18 @@ public:
       prev_optimized_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id));
     }
 
+    publishTf(prev_optimized_pose, prev_optimized_velocity, prev_optimized_bias);
+
     prev_imu_timestamp = imu_msg->header.stamp;
     pose_id++;
+  }
+  
+  void publishTf(Pose3 &prev_optimized_pose, Vector3 &prev_optimized_velocity, 
+    imuBias::ConstantBias &prev_optimized_bias) {
+//    tf::Transform T_b_w_gt_tf;
+//    tf::transformEigenToTF(T_b_w_gt, T_b_w_gt_tf);
+//    tf_pub.sendTransform(tf::StampedTransform(
+//          T_b_w_gt_tf, msg->header.stamp, fixed_frame_id, child_frame_id));
   }
   
   void initializeIMUParameters(const ImuConstPtr& imu_msg) { // **
