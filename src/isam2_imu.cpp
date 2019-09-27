@@ -11,6 +11,7 @@
 
 #include <legged_vio/CameraMeasurement.h>
 #include <sensor_msgs/Imu.h>
+#include <tf/transform_broadcaster.h>
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_ros/point_cloud.h>
@@ -88,6 +89,9 @@ private:
 
   // Hold ROS node handle initialized in main
   shared_ptr<ros::NodeHandle> nh_ptr;
+    
+  // Publishers
+  tf::TransformBroadcaster tf_pub;
 
   // Create iSAM2 object
   unique_ptr<ISAM2> isam;
@@ -96,23 +100,20 @@ private:
   NonlinearFactorGraph graph;
   Values newNodes;
   Values optimizedNodes; // current estimate of values
-  
-  // Initialize VIO Variables
   Pose3 prev_optimized_pose; // current estimate of previous pose
-  
-  // Initialize IMU Variables // **
   Vector3 prev_optimized_velocity;
   imuBias::ConstantBias prev_optimized_bias;
+  
+  // Initialize IMU Variables // **
   PreintegratedImuMeasurements* imu_preintegrated; // CHANGE BACK TO COMBINED (Combined<->Imu)
   ros::Time prev_imu_timestamp;
-  
+    
   // Noise models // ** (pose_noise is a duplicate variable)
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas(
     (Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished() // rad,rad,rad,m, m, m
   );
   noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3,0.1); // m/s
   noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6,1e-3);
-  
 
 public:
  
@@ -237,7 +238,7 @@ public:
 //    tf::Transform T_b_w_gt_tf;
 //    tf::transformEigenToTF(T_b_w_gt, T_b_w_gt_tf);
 //    tf_pub.sendTransform(tf::StampedTransform(
-//          T_b_w_gt_tf, msg->header.stamp, fixed_frame_id, child_frame_id));
+//          T_b_w_gt_tf, ros::Time::now(), fixed_frame_id, child_frame_id));
   }
   
   void initializeIMUParameters(const ImuConstPtr& imu_msg) { // **

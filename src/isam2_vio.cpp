@@ -81,6 +81,9 @@ private:
 
   // Hold ROS node handle initialized in main
   shared_ptr<ros::NodeHandle> nh_ptr;
+  
+  // Publishers
+  ros::Publisher feature_cloud_pub; 
 
   // Create iSAM2 object
   unique_ptr<ISAM2> isam;
@@ -89,32 +92,21 @@ private:
   NonlinearFactorGraph graph;
   Values newNodes;
   Values optimizedNodes; // current estimate of values
+  Pose3 prev_optimized_pose;   // current estimate of previous pose
     
   // Initialize VIO Variables
-  Pose3 prev_optimized_pose; // current estimate of previous pose
+  double f;                    // Camera calibration intrinsics
+  double cx;
+  double cy;
+  double resolution_x;         // Image distortion intrinsics
+  double resolution_y;
+  Cal3_S2Stereo::shared_ptr K; // Camera calibration intrinsic matrix
+  double Tx;                   // Camera calibration extrinsic: distance from cam0 to cam1  
   
   // Noise models
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
   noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 1.0); // one pixel in u and v
   noiseModel::Isotropic::shared_ptr landmark_noise = noiseModel::Isotropic::Sigma(3, 0.1);
-
-  // Camera calibration intrinsics
-  double f;
-  double cx;
-  double cy;
-  
-  // Image distortion intrinsics
-  double resolution_x;
-  double resolution_y;
-
-  // Camera calibration intrinsic matrix
-  Cal3_S2Stereo::shared_ptr K; 
-
-  // Camera calibration extrinsic
-  double Tx; // distance from cam0 to cam1  
-
-  // Publish PointCloud messages
-  ros::Publisher feature_cloud_pub; 
 
 public:
  
