@@ -239,7 +239,6 @@ public:
     tf::quaternionEigenToTF(prev_optimized_pose.rotation().toQuaternion(), q_tf);
     tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
-//    tf::transformEigenToTF(T_b_w_gt, world_to_imu_tf);
     tf_pub.sendTransform(tf::StampedTransform(
           world_to_imu_tf, imu_timestamp, "world", "robot"));
   }
