@@ -1,4 +1,4 @@
-// SUBSCRIBER NODE ("isam2")
+// SUBSCRIBER NODE ("isam2_vio")
 
 // ROS/PACKAGE INCLUDES
 /* ************************************************************************* */

@@ -1,4 +1,4 @@
-// SUBSCRIBER NODE ("isam2_imu") <-- TODO: integrate extra lines marked by // ** into isam2.cpp
+// SUBSCRIBER NODE ("isam2_imu") <-- lines marked by "// **" were added into isam2_vio to make isam2
 
 // ROS/PACKAGE INCLUDES
 /* ************************************************************************* */
@@ -11,8 +11,8 @@
 
 #include <legged_vio/CameraMeasurement.h>
 #include <sensor_msgs/Imu.h>
-#include <tf/transform_broadcaster.h>
-#include <tf_conversions/tf_eigen.h>
+#include <tf/transform_broadcaster.h> // **
+#include <tf_conversions/tf_eigen.h> // **
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_ros/point_cloud.h>
@@ -24,8 +24,6 @@
 
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/geometry/Cal3_S2Stereo.h>
-#include <gtsam/navigation/ImuFactor.h>
-#include <gtsam/navigation/CombinedImuFactor.h>
 
 // Each variable in the system (poses and landmarks) must be identified with a unique key.
 // We can either use simple integer keys (1, 2, 3, ...) or symbols (X1, X2, L1).
@@ -46,7 +44,9 @@
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/StereoFactor.h>
 #include <gtsam/slam/ProjectionFactor.h>
-#include <gtsam/slam/BetweenFactor.h>
+#include <gtsam/navigation/ImuFactor.h> // **
+#include <gtsam/navigation/CombinedImuFactor.h> // **
+#include <gtsam/slam/BetweenFactor.h> // **
 
 // ADDITIONAL INCLUDES
 /* ************************************************************************* */
@@ -90,7 +90,7 @@ private:
   shared_ptr<ros::NodeHandle> nh_ptr;
     
   // Publishers
-  tf::TransformBroadcaster tf_pub;
+  tf::TransformBroadcaster tf_pub; // **
 
   // Create iSAM2 object
   unique_ptr<ISAM2> isam;
@@ -100,8 +100,8 @@ private:
   Values newNodes;
   Values optimizedNodes; // current estimate of values
   Pose3 prev_optimized_pose; // current estimate of previous pose
-  Vector3 prev_optimized_velocity;
-  imuBias::ConstantBias prev_optimized_bias;
+  Vector3 prev_optimized_velocity; // **
+  imuBias::ConstantBias prev_optimized_bias; // **
   
   // Initialize IMU Variables // **
   PreintegratedImuMeasurements* imu_preintegrated; // CHANGE BACK TO COMBINED (Combined<->Imu)
@@ -210,7 +210,7 @@ public:
 //      ROS_INFO("after second update step");
 
       // Update the node values that have been seen up to this point
-      optimizedNodes = isam->calculateEstimate(); // Indeterminant linear system detected while working near variable (Symbol: b0)
+      optimizedNodes = isam->calculateEstimate();
       optimizedNodes.print("Current estimate: ");
 
       // Clear the objects holding new factors and node values for the next iteration

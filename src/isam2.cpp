@@ -9,8 +9,10 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 
-#include <legged_vio/CameraMeasurement.h>
 #include <sensor_msgs/Imu.h>
+#include <tf/transform_broadcaster.h>
+#include <tf_conversions/tf_eigen.h> 
+#include <legged_vio/CameraMeasurement.h>
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_ros/point_cloud.h>
@@ -40,6 +42,9 @@
 // In GTSAM, measurement functions are represented as 'factors'. Several common factors
 // have been provided with the library for solving robotics/SLAM/Bundle Adjustment problems.
 #include <gtsam/slam/PriorFactor.h>
+#include <gtsam/navigation/ImuFactor.h> 
+#include <gtsam/navigation/CombinedImuFactor.h> 
+#include <gtsam/slam/BetweenFactor.h> 
 #include <gtsam/slam/StereoFactor.h>
 #include <gtsam/slam/ProjectionFactor.h>
 
@@ -64,7 +69,7 @@ using namespace gtsam;
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
   string imu_topic_id = "/zed/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
-  string fixed_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
+  string camera_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
 };
 
 // CALLBACK WRAPPER CLASS
@@ -80,6 +85,10 @@ private:
 
   // Hold ROS node handle initialized in main
   shared_ptr<ros::NodeHandle> nh_ptr;
+  
+  // Publishers
+  tf::TransformBroadcaster tf_pub;
+  ros::Publisher feature_cloud_pub; 
 
   // Create iSAM2 object
   unique_ptr<ISAM2> isam;
@@ -88,32 +97,31 @@ private:
   NonlinearFactorGraph graph;
   Values newNodes;
   Values optimizedNodes; // current estimate of values
+  Pose3 prev_optimized_pose;   // current estimate of previous pose
+  Vector3 prev_optimized_velocity; 
+  imuBias::ConstantBias prev_optimized_bias;
+      
+  // Initialize IMU Variables
+  PreintegratedImuMeasurements* imu_preintegrated; // CHANGE BACK TO COMBINED (Combined<->Imu)
+  ros::Time prev_imu_timestamp;
     
   // Initialize VIO Variables
-  Pose3 prev_optimized_pose; // current estimate of previous pose
-  
-  // Noise models
-  noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
-  noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 1.0); // one pixel in u and v
-  noiseModel::Isotropic::shared_ptr landmark_noise = noiseModel::Isotropic::Sigma(3, 0.1);
-
-  // Camera calibration intrinsics
-  double f;
+  double f;                    // Camera calibration intrinsics
   double cx;
   double cy;
-  
-  // Image distortion intrinsics
-  double resolution_x;
+  double resolution_x;         // Image distortion intrinsics
   double resolution_y;
-
-  // Camera calibration intrinsic matrix
-  Cal3_S2Stereo::shared_ptr K; 
-
-  // Camera calibration extrinsic
-  double Tx; // distance from cam0 to cam1  
-
-  // Publish PointCloud messages
-  ros::Publisher feature_cloud_pub; 
+  Cal3_S2Stereo::shared_ptr K; // Camera calibration intrinsic matrix
+  double Tx;                   // Camera calibration extrinsic: distance from cam0 to cam1  
+    
+  // Noise models (pose_noise used in both VIO and IMU)
+  noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas(
+    (Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished() // rad,rad,rad,m, m, m
+  );
+  noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3,0.1); // m/s
+  noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6,1e-3);
+  noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 1.0); // one pixel in u and v
+  noiseModel::Isotropic::shared_ptr landmark_noise = noiseModel::Isotropic::Sigma(3, 0.1);
 
 public:
  
@@ -159,14 +167,11 @@ public:
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
-
-    // Add node value for current pose with initial estimate being previous pose
-    if (pose_id == 0 || pose_id == 1) {
-      prev_optimized_pose = Pose3();
-    } else {
-      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
-    } 
-    newNodes.insert(Symbol('x', pose_id), prev_optimized_pose);
+  
+    // Get IMU orientation, angular vel, and linear acc 
+    geometry_msgs::Quaternion orient = imu_msg->orientation; // fields: x, y, z, w
+    geometry_msgs::Vector3 ang_vel = imu_msg->angular_velocity; // fields: x, y, z
+    geometry_msgs::Vector3 lin_acc = imu_msg->linear_acceleration; // fields: x, y, z
 
     // Use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
@@ -179,7 +184,7 @@ public:
     }
     
     // Publish feature PointCloud messages
-    feature_cloud_msg_ptr->header.frame_id = lv.fixed_frame_id;
+    feature_cloud_msg_ptr->header.frame_id = lv.camera_frame_id;
     feature_cloud_msg_ptr->height = 1;
     feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
     this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 
@@ -188,16 +193,56 @@ public:
     Eigen::Matrix<double,4,1> centroid;
     pcl::compute3DCentroid(*feature_cloud_msg_ptr, centroid); // find centroid position of PointCloud
     ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", pose_id, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
-          
+    
     if (pose_id == 0) {
-
-      // Add prior on pose x0 (zero pose is used to set world frame)
-      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
-
-      // Indicate that all node values seen in pose 0 have been seen for next iteration 
+    
+      initializeIMUParameters(imu_msg); // initializes imu_preintegrated
+      
+      // Add priors (pose, velocity, and bias)
+      Rot3 prior_rotation = Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w); // quaternion -> Rot3
+      prev_optimized_pose = Pose3(prior_rotation, Point3(0,0,0)); // start at origin with IMU's starting rotation
+      prev_optimized_velocity = Vector3();
+      prev_optimized_bias = imuBias::ConstantBias();
+      newNodes.insert(Symbol('x', 0), prev_optimized_pose);
+      newNodes.insert(Symbol('v', 0), prev_optimized_velocity);
+      newNodes.insert(Symbol('b', 0), prev_optimized_bias);
+      graph.emplace_shared< PriorFactor<Pose3> >(Symbol('x', 0), prev_optimized_pose, pose_noise);
+      graph.emplace_shared< PriorFactor<Vector3> >(Symbol('v', 0), prev_optimized_velocity, velocity_noise);
+      graph.emplace_shared< PriorFactor<imuBias::ConstantBias> >(Symbol('b', 0), prev_optimized_bias, bias_noise);
+      
+      // Indicate that all node values seen in pose 0 have been seen for next iteration (landmarks)
       optimizedNodes = newNodes; 
-
+      
     } else {
+    
+      // Integrate current reading from IMU
+      double dt = (imu_msg->header.stamp - prev_imu_timestamp).toSec();
+      imu_preintegrated->integrateMeasurement(
+        Vector3(lin_acc.x, lin_acc.y, lin_acc.z), // measuredAcc
+        Vector3(ang_vel.x, ang_vel.y, ang_vel.z), // measuredOmega
+        dt                                        // time between measurements
+      ); 
+      
+      // Add factors between previous and current state for current IMU measurement
+      graph.emplace_shared<ImuFactor>(
+        Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
+        Symbol('x', pose_id    ), Symbol('v', pose_id    ),
+        Symbol('b', pose_id - 1), *imu_preintegrated     
+      );
+      imuBias::ConstantBias zero_bias(Vector3(0, 0, 0), Vector3(0, 0, 0));
+      graph.emplace_shared< BetweenFactor<imuBias::ConstantBias> >(
+        Symbol('b', pose_id - 1), 
+        Symbol('b', pose_id    ), 
+        zero_bias, 
+        bias_noise
+      );
+      
+      // Predict initial estimates for current state 
+      NavState prev_optimized_state = NavState(prev_optimized_pose, prev_optimized_velocity);
+      NavState propagated_state = imu_preintegrated->predict(prev_optimized_state, prev_optimized_bias);
+      newNodes.insert(Symbol('x', pose_id), propagated_state.pose()); 
+      newNodes.insert(Symbol('v', pose_id), propagated_state.v()); 
+      newNodes.insert(Symbol('b', pose_id), prev_optimized_bias); 
     
       // UPDATE ISAM WITH NEW FACTORS AND NODES FROM THIS POSE 
       
@@ -222,9 +267,21 @@ public:
       // Clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
       newNodes.clear();
+      
+      // Reset the IMU preintegration object 
+      imu_preintegrated->resetIntegrationAndSetBias(prev_optimized_bias); 
+          
+      // Get optimized nodes for next iteration 
+      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
+      prev_optimized_velocity = optimizedNodes.at<Vector3>(Symbol('v', pose_id));
+      prev_optimized_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id));
     }
 
+    prev_imu_timestamp = imu_msg->header.stamp;
     pose_id++;
+    
+    publishTf(prev_optimized_pose, prev_imu_timestamp);
+    cout << "current pose:\n" << prev_optimized_pose << endl;
   }
 
 
@@ -277,6 +334,49 @@ public:
         
     return world_point;
   } 
+  
+  void publishTf(Pose3 &prev_optimized_pose, ros::Time &imu_timestamp) {
+  
+    tf::Quaternion q_tf;
+    tf::Vector3 t_tf;
+    tf::quaternionEigenToTF(prev_optimized_pose.rotation().toQuaternion(), q_tf);
+    tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
+    tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
+    tf_pub.sendTransform(tf::StampedTransform(
+          world_to_imu_tf, imu_timestamp, "world", "robot"));
+  }
+  
+  void initializeIMUParameters(const ImuConstPtr& imu_msg) { 
+    
+    // Get (constant) IMU covariance of orientation, angular vel, and linear acc (row major about x, y, z axes)
+    boost::array<double, 9> orient_cov = imu_msg->orientation_covariance;
+    boost::array<double, 9> ang_vel_cov = imu_msg->angular_velocity_covariance;
+    boost::array<double, 9> lin_acc_cov = imu_msg->linear_acceleration_covariance;
+    
+    // Convert covariances to matrix form (Eigen::Matrix<float, 3, 3>)
+    gtsam::Matrix3 orient_cov_mat;
+    gtsam::Matrix3 ang_vel_cov_mat;
+    gtsam::Matrix3 lin_acc_cov_mat;
+    orient_cov_mat << orient_cov[0], orient_cov[1], orient_cov[2], orient_cov[3], orient_cov[4], 
+                      orient_cov[5],orient_cov[6], orient_cov[7], orient_cov[8];
+    ang_vel_cov_mat << ang_vel_cov[0], ang_vel_cov[1], ang_vel_cov[2], ang_vel_cov[3], ang_vel_cov[4], 
+                       ang_vel_cov[5],ang_vel_cov[6], ang_vel_cov[7], ang_vel_cov[8];
+    lin_acc_cov_mat << lin_acc_cov[0], lin_acc_cov[1], lin_acc_cov[2], lin_acc_cov[3], lin_acc_cov[4], 
+                       lin_acc_cov[5],lin_acc_cov[6], lin_acc_cov[7], lin_acc_cov[8];   
+    std::cout << "Orientation Covariance Matrix (not used): " << std::endl << orient_cov_mat << std::endl; 
+    std::cout << "Angular Velocity Covariance Matrix: " << std::endl << ang_vel_cov_mat << std::endl; 
+    std::cout << "Linear Acceleration Covariance Matrix: " << std::endl << lin_acc_cov_mat << std::endl; 
+    
+    // Assign IMU preintegration parameters 
+    boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p =  PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0); 
+    p->accelerometerCovariance = lin_acc_cov_mat; //Matrix33::Identity(3,3) * pow(0.0003924,2);
+    p->integrationCovariance = Matrix33::Identity(3,3)*1e-8; //orient_cov_mat; (DON'T USE "orient_cov_mat": ALL ZEROS)
+    p->gyroscopeCovariance = ang_vel_cov_mat; //Matrix33::Identity(3,3) * pow(0.000205689024915,2); 
+    p->biasAccCovariance = Matrix33::Identity(3,3) * pow(0.004905,2); //Matrix33::Identity(3,3) *  1e-5; 
+    p->biasOmegaCovariance = Matrix33::Identity(3,3) * pow(0.000001454441043,2); //Matrix33::Identity(3,3) * 1e-5;; 
+    p->biasAccOmegaInt = Matrix::Identity(6,6)*1e-5; //Matrix::Identity(6,6) * 1e-5; 
+    imu_preintegrated = new PreintegratedImuMeasurements(p, imuBias::ConstantBias()); // CHANGE BACK TO COMBINED (Combined<->Imu)
+  }
 
 };
 

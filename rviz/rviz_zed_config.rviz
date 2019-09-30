@@ -27,7 +27,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: PointCloud2
+    SyncSource: ""
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -118,7 +118,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 10
+      Distance: 16.3920841217041
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -133,10 +133,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.2346024513244629
+      Pitch: 0.38539761304855347
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.8804032802581787
+      Yaw: 4.085398197174072
     Saved: ~
 Window Geometry:
   Displays:
