@@ -326,9 +326,11 @@ public:
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
 //      ROS_INFO("first time seeing feature %d", landmark_id);
-      world_point = prev_optimized_pose.transform_from(camera_point);
-//      Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
-//      world_point = prev_optimized_camera_pose.transform_from(camera_point);
+//      world_point = prev_optimized_pose.transform_from(camera_point);
+      Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
+      world_point = prev_optimized_camera_pose.transform_from(camera_point);
+//      cout << "feature[" << feature.id << "] in camera frame: " << camera_point << endl;
+//      cout << "feature[" << feature.id << "] in imu frame: " << prev_optimized_pose.transform_to(world_point) << endl;
       newNodes.insert(landmark, world_point);
     }
     
