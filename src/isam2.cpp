@@ -106,13 +106,14 @@ private:
   ros::Time prev_imu_timestamp;
     
   // Initialize VIO Variables
-  double f;                    // Camera calibration intrinsics
+  double f;                     // Camera calibration intrinsics
   double cx;
   double cy;
-  double resolution_x;         // Image distortion intrinsics
+  double resolution_x;          // Image distortion intrinsics
   double resolution_y;
-  Cal3_S2Stereo::shared_ptr K; // Camera calibration intrinsic matrix
-  double Tx;                   // Camera calibration extrinsic: distance from cam0 to cam1  
+  Cal3_S2Stereo::shared_ptr K;  // Camera calibration intrinsic matrix
+  double Tx;                    // Camera calibration extrinsic: distance from cam0 to cam1
+  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
     
   // Noise models (pose_noise used in both VIO and IMU)
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas(
@@ -140,14 +141,17 @@ public:
     // YAML image resolution parameters (radtan): [k1 k2 r1 r2]
     vector<double> cam0_resolution(2);
     nh_ptr->getParam("cam0/resolution", cam0_resolution); // <- neglect right camera
-    this->resolution_x =  cam0_resolution[0];
-    this->resolution_y =  cam0_resolution[1];
+    this->resolution_x = cam0_resolution[0];
+    this->resolution_y = cam0_resolution[1];
     
     // YAML extrinsics (distance between 2 cameras)
     vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
-    ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1"));
+    vector<double> T_cam_imu(16);
+    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
+    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
+    T_cam_imu_mat = move(T_cam_imu_mat_copy);
     
     // Set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
@@ -160,10 +164,13 @@ public:
     isam.reset(new ISAM2(parameters));
 
     // Print to confirm reading the YAML file correctly
+    ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1"));
+    ROS_INFO("Tx: %f", Tx);
     ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
       cam0_intrinsics[2], cam0_intrinsics[3]);
-    ROS_INFO("Tx: %f", Tx);
+    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
+    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
@@ -284,7 +291,6 @@ public:
     cout << "current pose:\n" << prev_optimized_pose << endl;
   }
 
-
   // Add node for feature if not already there and connect to current pose with a factor
   // Add estimated world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
@@ -319,8 +325,10 @@ public:
 		// Add node value for feature/landmark if it doesn't already exist
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
-//      ROS_INFO("first time seeing feature %d", landmark_id); 
-      world_point = prev_optimized_pose.transform_from(camera_point); 
+//      ROS_INFO("first time seeing feature %d", landmark_id);
+      world_point = prev_optimized_pose.transform_from(camera_point);
+//      Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
+//      world_point = prev_optimized_camera_pose.transform_from(camera_point);
       newNodes.insert(landmark, world_point);
     }
     
@@ -354,27 +362,21 @@ public:
     boost::array<double, 9> lin_acc_cov = imu_msg->linear_acceleration_covariance;
     
     // Convert covariances to matrix form (Eigen::Matrix<float, 3, 3>)
-    gtsam::Matrix3 orient_cov_mat;
-    gtsam::Matrix3 ang_vel_cov_mat;
-    gtsam::Matrix3 lin_acc_cov_mat;
-    orient_cov_mat << orient_cov[0], orient_cov[1], orient_cov[2], orient_cov[3], orient_cov[4], 
-                      orient_cov[5],orient_cov[6], orient_cov[7], orient_cov[8];
-    ang_vel_cov_mat << ang_vel_cov[0], ang_vel_cov[1], ang_vel_cov[2], ang_vel_cov[3], ang_vel_cov[4], 
-                       ang_vel_cov[5],ang_vel_cov[6], ang_vel_cov[7], ang_vel_cov[8];
-    lin_acc_cov_mat << lin_acc_cov[0], lin_acc_cov[1], lin_acc_cov[2], lin_acc_cov[3], lin_acc_cov[4], 
-                       lin_acc_cov[5],lin_acc_cov[6], lin_acc_cov[7], lin_acc_cov[8];   
+    gtsam::Matrix3 orient_cov_mat(orient_cov.data());
+    gtsam::Matrix3 ang_vel_cov_mat(ang_vel_cov.data());
+    gtsam::Matrix3 lin_acc_cov_mat(lin_acc_cov.data());
     std::cout << "Orientation Covariance Matrix (not used): " << std::endl << orient_cov_mat << std::endl; 
     std::cout << "Angular Velocity Covariance Matrix: " << std::endl << ang_vel_cov_mat << std::endl; 
     std::cout << "Linear Acceleration Covariance Matrix: " << std::endl << lin_acc_cov_mat << std::endl; 
     
     // Assign IMU preintegration parameters 
     boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p =  PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0); 
-    p->accelerometerCovariance = lin_acc_cov_mat; //Matrix33::Identity(3,3) * pow(0.0003924,2);
-    p->integrationCovariance = Matrix33::Identity(3,3)*1e-8; //orient_cov_mat; (DON'T USE "orient_cov_mat": ALL ZEROS)
-    p->gyroscopeCovariance = ang_vel_cov_mat; //Matrix33::Identity(3,3) * pow(0.000205689024915,2); 
-    p->biasAccCovariance = Matrix33::Identity(3,3) * pow(0.004905,2); //Matrix33::Identity(3,3) *  1e-5; 
-    p->biasOmegaCovariance = Matrix33::Identity(3,3) * pow(0.000001454441043,2); //Matrix33::Identity(3,3) * 1e-5;; 
-    p->biasAccOmegaInt = Matrix::Identity(6,6)*1e-5; //Matrix::Identity(6,6) * 1e-5; 
+    p->accelerometerCovariance = lin_acc_cov_mat;
+    p->integrationCovariance = Matrix33::Identity(3,3)*1e-8; // (DON'T USE "orient_cov_mat": ALL ZEROS)
+    p->gyroscopeCovariance = ang_vel_cov_mat; 
+    p->biasAccCovariance = Matrix33::Identity(3,3) * pow(0.004905,2); 
+    p->biasOmegaCovariance = Matrix33::Identity(3,3) * pow(0.000001454441043,2); 
+    p->biasAccOmegaInt = Matrix::Identity(6,6)*1e-5;
     imu_preintegrated = new PreintegratedImuMeasurements(p, imuBias::ConstantBias()); // CHANGE BACK TO COMBINED (Combined<->Imu)
   }
 
