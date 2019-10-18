@@ -69,6 +69,7 @@ using namespace gtsam;
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
   string imu_topic_id = "/zed/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
+  string world_frame_id = "world";
   string camera_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
 };
 
@@ -88,7 +89,8 @@ private:
   
   // Publishers
   tf::TransformBroadcaster tf_pub;
-  ros::Publisher feature_cloud_pub; 
+  ros::Publisher feature_cloud_camera_pub;
+  ros::Publisher feature_cloud_world_pub; 
 
   // Create iSAM2 object
   unique_ptr<ISAM2> isam;
@@ -102,7 +104,7 @@ private:
   imuBias::ConstantBias prev_optimized_bias;
       
   // Initialize IMU Variables
-  PreintegratedImuMeasurements* imu_preintegrated; // CHANGE BACK TO COMBINED (Combined<->Imu)
+  PreintegratedImuMeasurements* imu_preintegrated; // CHANGE BACK TO COMBINED: (Combined<->Imu)
   ros::Time prev_imu_timestamp;
     
   // Initialize VIO Variables
@@ -129,7 +131,8 @@ public:
   Callbacks(shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(move(nh_ptr_copy)) {
 
     // initialize PointCloud publisher
-    this->feature_cloud_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud", 1000);
+    this->feature_cloud_camera_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_camera", 1000);
+    this->feature_cloud_world_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_world", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
     vector<double> cam0_intrinsics(4);
@@ -184,22 +187,24 @@ public:
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
     
     // Create object to publish PointCloud estimates of features in this pose
-    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
-      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr, prev_optimized_pose);
+      Point3 world_point = processFeature(
+        feature_vector[i], prev_optimized_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr
+      );
     }
     
     // Publish feature PointCloud messages
-    feature_cloud_msg_ptr->header.frame_id = lv.camera_frame_id;
-    feature_cloud_msg_ptr->height = 1;
-    feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
-    this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 
-    
-    // Print info about this pose to console
-    Eigen::Matrix<double,4,1> centroid;
-    pcl::compute3DCentroid(*feature_cloud_msg_ptr, centroid); // find centroid position of PointCloud
-    ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", pose_id, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
+    feature_cloud_camera_msg_ptr->header.frame_id = lv.camera_frame_id;
+    feature_cloud_camera_msg_ptr->height = 1;
+    feature_cloud_camera_msg_ptr->width = feature_cloud_camera_msg_ptr->points.size();
+    this->feature_cloud_camera_pub.publish(feature_cloud_camera_msg_ptr); 
+    feature_cloud_world_msg_ptr->header.frame_id = lv.world_frame_id;
+    feature_cloud_world_msg_ptr->height = 1;
+    feature_cloud_world_msg_ptr->width = feature_cloud_world_msg_ptr->points.size();
+    this->feature_cloud_world_pub.publish(feature_cloud_world_msg_ptr); 
     
     if (pose_id == 0) {
     
@@ -221,9 +226,15 @@ public:
       optimizedNodes = newNodes; 
       
     } else {
+     
+      // Print info about this pose to console
+      double dt = (imu_msg->header.stamp - prev_imu_timestamp).toSec();
+      ROS_INFO("frame %d, dt = %f ms, %lu total features", pose_id, dt*1000, feature_vector.size());
+//      Eigen::Matrix<double,4,1> centroid;
+//      pcl::compute3DCentroid(*feature_cloud_camera_msg_ptr, centroid); // find centroid position of PointCloud in camera frame
+//      ROS_INFO(", centroid in camera frame: (%f, %f, %f)", centroid[0], centroid[1], centroid[2]);
     
       // Integrate current reading from IMU
-      double dt = (imu_msg->header.stamp - prev_imu_timestamp).toSec();
       imu_preintegrated->integrateMeasurement(
         Vector3(lin_acc.x, lin_acc.y, lin_acc.z), // measuredAcc
         Vector3(ang_vel.x, ang_vel.y, ang_vel.z), // measuredOmega
@@ -231,6 +242,12 @@ public:
       ); 
       
       // Add factors between previous and current state for current IMU measurement
+//      graph.emplace_shared<CombinedImuFactor>(
+//        Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
+//        Symbol('x', pose_id    ), Symbol('v', pose_id    ),
+//        Symbol('b', pose_id - 1), Symbol('b', pose_id    ),
+//        *imu_preintegrated
+//      );
       graph.emplace_shared<ImuFactor>(
         Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
         Symbol('x', pose_id    ), Symbol('v', pose_id    ),
@@ -292,10 +309,12 @@ public:
   }
 
   // Add node for feature if not already there and connect to current pose with a factor
+  // Add estimated camera coordinate of feature to PointCloud 
   // Add estimated world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
-                      pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr,
-                      Pose3 prev_optimized_pose) {
+                        Pose3 prev_optimized_pose,
+                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr,
+                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr) {
 
     Point3 world_point;
 
@@ -318,20 +337,24 @@ public:
     double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
-    // Add location in camera frame to PointCloud
+    // transform the most recent IMU pose estimate to the estimated camera pose
+    Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
+    
+    // transform landmark coordinates from camera frame to world frame using estimated camera pose
+    world_point = prev_optimized_camera_pose.transform_from(camera_point);
+    
+    // Add location in camera and world frame to PointCloud
     pcl::PointXYZ pcl_camera_point = pcl::PointXYZ(camera_point.x(), camera_point.y(), camera_point.z());
-    feature_cloud_msg_ptr->points.push_back(pcl_camera_point); 
+    feature_cloud_camera_msg_ptr->points.push_back(pcl_camera_point);   
+    pcl::PointXYZ pcl_world_point = pcl::PointXYZ(world_point.x(), world_point.y(), world_point.z());
+    feature_cloud_world_msg_ptr->points.push_back(pcl_world_point);  
 
 		// Add node value for feature/landmark if it doesn't already exist
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
-      // transform the most recent IMU pose estimate to the estimated camera pose
-      Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
-      // transform landmark coordinates from camera frame to world frame using estimated camera pose
-      world_point = prev_optimized_camera_pose.transform_from(camera_point);
+      newNodes.insert(landmark, world_point);
 //      cout << "feature[" << feature.id << "] in camera frame: " << camera_point << endl;
 //      cout << "feature[" << feature.id << "] in imu frame: " << prev_optimized_pose.transform_to(world_point) << endl;
-      newNodes.insert(landmark, world_point);
     }
     
     // Add factor from this frame's pose to the feature/landmark
@@ -379,7 +402,7 @@ public:
     p->biasAccCovariance = Matrix33::Identity(3,3) * pow(0.004905,2); 
     p->biasOmegaCovariance = Matrix33::Identity(3,3) * pow(0.000001454441043,2); 
     p->biasAccOmegaInt = Matrix::Identity(6,6) * 1e-5;
-    imu_preintegrated = new PreintegratedImuMeasurements(p, imuBias::ConstantBias()); // CHANGE BACK TO COMBINED (Combined<->Imu)
+    imu_preintegrated = new PreintegratedImuMeasurements(p, imuBias::ConstantBias()); // CHANGE BACK TO COMBINED: (Combined<->Imu)
   }
 
 };

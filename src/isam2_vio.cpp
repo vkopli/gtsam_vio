@@ -83,7 +83,7 @@ private:
   shared_ptr<ros::NodeHandle> nh_ptr;
   
   // Publishers
-  ros::Publisher feature_cloud_pub; 
+  ros::Publisher feature_cloud_camera_pub; 
 
   // Create iSAM2 object
   unique_ptr<ISAM2> isam;
@@ -113,7 +113,7 @@ public:
   Callbacks(shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(move(nh_ptr_copy)) {
 
     // initialize PointCloud publisher
-    this->feature_cloud_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud", 1000);
+    this->feature_cloud_camera_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_camera", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
     vector<double> cam0_intrinsics(4);
@@ -165,21 +165,21 @@ public:
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
     
     // Create object to publish PointCloud estimates of features in this pose
-    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
-      Point3 world_point = processFeature(feature_vector[i], feature_cloud_msg_ptr, prev_optimized_pose);
+      Point3 world_point = processFeature(feature_vector[i], feature_cloud_camera_msg_ptr, prev_optimized_pose);
     }
     
     // Publish feature PointCloud messages
-    feature_cloud_msg_ptr->header.frame_id = lv.camera_frame_id;
-    feature_cloud_msg_ptr->height = 1;
-    feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
-    this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 
+    feature_cloud_camera_msg_ptr->header.frame_id = lv.camera_frame_id;
+    feature_cloud_camera_msg_ptr->height = 1;
+    feature_cloud_camera_msg_ptr->width = feature_cloud_camera_msg_ptr->points.size();
+    this->feature_cloud_camera_pub.publish(feature_cloud_camera_msg_ptr); 
     
     // Print info about this pose to console
     Eigen::Matrix<double,4,1> centroid;
-    pcl::compute3DCentroid(*feature_cloud_msg_ptr, centroid); // find centroid position of PointCloud
+    pcl::compute3DCentroid(*feature_cloud_camera_msg_ptr, centroid); // find centroid position of PointCloud
     ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", pose_id, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
           
     if (pose_id == 0) {
@@ -224,7 +224,7 @@ public:
   // Add node for feature if not already there and connect to current pose with a factor
   // Add estimated world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
-                      pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr,
+                      pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr,
                       Pose3 prev_optimized_pose) {
 
     Point3 world_point;
@@ -250,7 +250,7 @@ public:
     
     // Add location in camera frame to PointCloud
     pcl::PointXYZ pcl_camera_point = pcl::PointXYZ(camera_point.x(), camera_point.y(), camera_point.z());
-    feature_cloud_msg_ptr->points.push_back(pcl_camera_point); 
+    feature_cloud_camera_msg_ptr->points.push_back(pcl_camera_point); 
 
 		// Add node value for feature/landmark if it doesn't already exist
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));

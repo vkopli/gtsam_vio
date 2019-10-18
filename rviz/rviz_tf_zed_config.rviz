@@ -6,6 +6,8 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /TF1
+        - /TF1/Frames1
         - /PointCloud21
       Splitter Ratio: 0.5
     Tree Height: 549
@@ -21,6 +23,7 @@ Panels:
   - Class: rviz/Views
     Expanded:
       - /Current View1
+      - /Orbit1
     Name: Views
     Splitter Ratio: 0.5
   - Class: rviz/Time
@@ -60,6 +63,26 @@ Visualization Manager:
       Radius: 0.10000000149011612
       Reference Frame: <Fixed Frame>
       Value: true
+    - Class: rviz/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+        robot:
+          Value: true
+        world:
+          Value: true
+      Marker Scale: 1
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree:
+        world:
+          robot:
+            {}
+      Update Interval: 0
+      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -74,7 +97,7 @@ Visualization Manager:
       Decay Time: 0
       Enabled: true
       Invert Rainbow: false
-      Max Color: 239; 41; 41
+      Max Color: 255; 255; 255
       Max Intensity: 4096
       Min Color: 0; 0; 0
       Min Intensity: 0
@@ -85,16 +108,16 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.05000000074505806
       Style: Flat Squares
-      Topic: /isam2_feature_point_cloud_camera
+      Topic: /isam2_feature_point_cloud_world
       Unreliable: false
       Use Fixed Frame: true
-      Use rainbow: false
+      Use rainbow: true
       Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: zed_left_camera_optical_frame
+    Fixed Frame: world
     Frame Rate: 30
   Name: root
   Tools:
@@ -118,7 +141,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 16.3920841217041
+      Distance: 24.305143356323242
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -133,11 +156,31 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.38539761304855347
+      Pitch: 0.4503975212574005
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.085398197174072
-    Saved: ~
+      Yaw: 1.2354004383087158
+    Saved:
+      - Class: rviz/Orbit
+        Distance: 21.314783096313477
+        Enable Stereo Rendering:
+          Stereo Eye Separation: 0.05999999865889549
+          Stereo Focal Distance: 1
+          Swap Stereo Eyes: false
+          Value: false
+        Focal Point:
+          X: 0
+          Y: 0
+          Z: 0
+        Focal Shape Fixed Size: true
+        Focal Shape Size: 0.05000000074505806
+        Invert Z Axis: false
+        Name: Orbit
+        Near Clip Distance: 0.009999999776482582
+        Pitch: 0.4503975212574005
+        Target Frame: <Fixed Frame>
+        Value: Orbit (rviz)
+        Yaw: 1.2354004383087158
 Window Geometry:
   Displays:
     collapsed: false
@@ -154,5 +197,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1200
-  X: 224
-  Y: 204
+  X: 69
+  Y: 193
