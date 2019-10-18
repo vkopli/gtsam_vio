@@ -117,10 +117,10 @@ private:
     
   // Noise models (pose_noise used in both VIO and IMU)
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas(
-    (Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished() // rad,rad,rad,m, m, m
-  );
-  noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3,0.1); // m/s
-  noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6,1e-3);
+    (Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()
+  ); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
+  noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3, 0.1); // m/s
+  noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6, 1e-3);
   noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 1.0); // one pixel in u and v
   noiseModel::Isotropic::shared_ptr landmark_noise = noiseModel::Isotropic::Sigma(3, 0.1);
 
