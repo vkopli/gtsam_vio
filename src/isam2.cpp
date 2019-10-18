@@ -97,7 +97,7 @@ private:
   NonlinearFactorGraph graph;
   Values newNodes;
   Values optimizedNodes; // current estimate of values
-  Pose3 prev_optimized_pose;   // current estimate of previous pose
+  Pose3 prev_optimized_pose;   // current estimate of previous pose (pose of IMU)
   Vector3 prev_optimized_velocity; 
   imuBias::ConstantBias prev_optimized_bias;
       
@@ -288,7 +288,7 @@ public:
     pose_id++;
     
     publishTf(prev_optimized_pose, prev_imu_timestamp);
-    cout << "current pose:\n" << prev_optimized_pose << endl;
+//    cout << "current pose:\n" << prev_optimized_pose << endl;
   }
 
   // Add node for feature if not already there and connect to current pose with a factor
@@ -325,9 +325,9 @@ public:
 		// Add node value for feature/landmark if it doesn't already exist
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
-//      ROS_INFO("first time seeing feature %d", landmark_id);
-//      world_point = prev_optimized_pose.transform_from(camera_point);
+      // transform the most recent IMU pose estimate to the estimated camera pose
       Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
+      // transform landmark coordinates from camera frame to world frame using estimated camera pose
       world_point = prev_optimized_camera_pose.transform_from(camera_point);
 //      cout << "feature[" << feature.id << "] in camera frame: " << camera_point << endl;
 //      cout << "feature[" << feature.id << "] in imu frame: " << prev_optimized_pose.transform_to(world_point) << endl;

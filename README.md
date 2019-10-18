@@ -14,6 +14,6 @@ using Euroc dataset (publicly available):
 using ZED dataset (Kalibr data, not publicly available):
 - roslaunch legged_vio image_processor_zed.launch
 - rosrun legged_vio isam2
-- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_zed_config.rviz 
-- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_config.rviz 
+- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_zed_config.rviz (visualize estimated 3D locations of features in camera frame)
+- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_config.rviz (visualize estimated IMU pose in world frame)
 - rosbag play ~/bagfiles/Kalibr_data.bag (requires the bagfile to be downloaded)
