@@ -117,8 +117,8 @@ private:
     
   // Noise models (pose_noise used in both VIO and IMU)
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas(
-    (Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()
-  ); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
+    (Vector(6) << Vector3::Constant(0.5),Vector3::Constant(0.1)).finished()
+  ); // rad on roll,pitch,yaw; meters std on x,y,z
   noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3, 0.1); // m/s
   noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6, 1e-3);
   noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 1.0); // one pixel in u and v
@@ -374,11 +374,11 @@ public:
     // Assign IMU preintegration parameters 
     boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p =  PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0); 
     p->accelerometerCovariance = lin_acc_cov_mat;
-    p->integrationCovariance = Matrix33::Identity(3,3)*1e-8; // (DON'T USE "orient_cov_mat": ALL ZEROS)
+    p->integrationCovariance = Matrix33::Identity(3,3) * 1e-8; // (DON'T USE "orient_cov_mat": ALL ZEROS)
     p->gyroscopeCovariance = ang_vel_cov_mat; 
     p->biasAccCovariance = Matrix33::Identity(3,3) * pow(0.004905,2); 
     p->biasOmegaCovariance = Matrix33::Identity(3,3) * pow(0.000001454441043,2); 
-    p->biasAccOmegaInt = Matrix::Identity(6,6)*1e-5;
+    p->biasAccOmegaInt = Matrix::Identity(6,6) * 1e-5;
     imu_preintegrated = new PreintegratedImuMeasurements(p, imuBias::ConstantBias()); // CHANGE BACK TO COMBINED (Combined<->Imu)
   }
 
