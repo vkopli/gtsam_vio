@@ -115,13 +115,13 @@ private:
   double Tx;                    // Camera calibration extrinsic: distance from cam0 to cam1
   gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
     
-  // Noise models (pose_noise used in both VIO and IMU)
+  // Noise models
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas(
     (Vector(6) << Vector3::Constant(0.5),Vector3::Constant(0.1)).finished()
-  ); // rad on roll,pitch,yaw; meters std on x,y,z
-  noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3, 0.1); // m/s
-  noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6, 1e-3);
-  noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 1.0); // one pixel in u and v
+  ); // (roll,pitch,yaw in rad; std on x,y,z in meters)
+  noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3, 0.1); // (dim, sigma in m/s)
+  noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6, 1e-3); // (dim, sigma)
+  noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 1.0); // (dim, sigma in pixels): one pixel in u and v
   noiseModel::Isotropic::shared_ptr landmark_noise = noiseModel::Isotropic::Sigma(3, 0.1);
 
 public:
