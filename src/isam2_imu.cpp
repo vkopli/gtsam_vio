@@ -71,7 +71,7 @@ using namespace gtsam;
 // can't use remapped topic names from image_processor_zed.launch bc not using same NodeHandle
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
-  string imu_topic_id = "/zed/imu/data_raw"; // "/imu0" for euroc data
+  string imu_topic_id = "/zed/zed_node/imu/data_raw"; // "/imu0" for euroc data
   string camera_frame_id = "zed_left_camera_optical_frame"; // "map" for euroc data
 };
 
@@ -104,7 +104,7 @@ private:
   imuBias::ConstantBias prev_optimized_bias; // **
   
   // Initialize IMU Variables // **
-  PreintegratedImuMeasurements* imu_preintegrated; // CHANGE BACK TO COMBINED (Combined<->Imu)
+  PreintegratedCombinedMeasurements* imu_preintegrated; // CHANGE BACK TO COMBINED (Combined<->Imu)
   ros::Time prev_imu_timestamp;
     
   // Noise models // ** (pose_noise is a duplicate variable)
@@ -167,24 +167,24 @@ public:
       ); 
       
       // Add factors between previous and current state for current IMU measurement // **      
-      graph.emplace_shared<ImuFactor>(
-        Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
-        Symbol('x', pose_id    ), Symbol('v', pose_id    ),
-        Symbol('b', pose_id - 1), *imu_preintegrated     
-      );
-      imuBias::ConstantBias zero_bias(Vector3(0, 0, 0), Vector3(0, 0, 0));
-      graph.emplace_shared< BetweenFactor<imuBias::ConstantBias> >(
-        Symbol('b', pose_id - 1), 
-        Symbol('b', pose_id    ), 
-        zero_bias, 
-        bias_noise
-      );
-//      graph.emplace_shared<CombinedImuFactor>(
-//        Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
-//        Symbol('x', pose_id    ), Symbol('v', pose_id    ),
-//        Symbol('b', pose_id - 1), Symbol('b', pose_id    ),
-//        *imu_preintegrated
-//      );
+      // graph.emplace_shared<ImuFactor>(
+      //   Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
+      //   Symbol('x', pose_id    ), Symbol('v', pose_id    ),
+      //   Symbol('b', pose_id - 1), *imu_preintegrated     
+      // );
+      // imuBias::ConstantBias zero_bias(Vector3(0, 0, 0), Vector3(0, 0, 0));
+      // graph.emplace_shared< BetweenFactor<imuBias::ConstantBias> >(
+      //   Symbol('b', pose_id - 1), 
+      //   Symbol('b', pose_id    ), 
+      //   zero_bias, 
+      //   bias_noise
+      // );
+     graph.emplace_shared<CombinedImuFactor>(
+       Symbol('x', pose_id - 1), Symbol('v', pose_id - 1),
+       Symbol('x', pose_id    ), Symbol('v', pose_id    ),
+       Symbol('b', pose_id - 1), Symbol('b', pose_id    ),
+       *imu_preintegrated
+     );
   
       // Predict initial estimates for current state // **
       NavState prev_optimized_state = NavState(prev_optimized_pose, prev_optimized_velocity);
@@ -265,14 +265,15 @@ public:
     std::cout << "Linear Acceleration Covariance Matrix: " << std::endl << lin_acc_cov_mat << std::endl; 
     
     // Assign IMU preintegration parameters 
-    boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p =  PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0); 
+    boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p =  PreintegratedCombinedMeasurements::Params::MakeSharedU(); 
+    p->n_gravity = gtsam::Vector3(-imu_msg->linear_acceleration.x, -imu_msg->linear_acceleration.y, -imu_msg->linear_acceleration.z);
     p->accelerometerCovariance = lin_acc_cov_mat; //Matrix33::Identity(3,3) * pow(0.0003924,2);
     p->integrationCovariance = Matrix33::Identity(3,3)*1e-8; //orient_cov_mat; (DON'T USE "orient_cov_mat": ALL ZEROS)
     p->gyroscopeCovariance = ang_vel_cov_mat; //Matrix33::Identity(3,3) * pow(0.000205689024915,2); 
     p->biasAccCovariance = Matrix33::Identity(3,3) * pow(0.004905,2); //Matrix33::Identity(3,3) *  1e-5; 
     p->biasOmegaCovariance = Matrix33::Identity(3,3) * pow(0.000001454441043,2); //Matrix33::Identity(3,3) * 1e-5;; 
     p->biasAccOmegaInt = Matrix::Identity(6,6)*1e-5; //Matrix::Identity(6,6) * 1e-5; 
-    imu_preintegrated = new PreintegratedImuMeasurements(p, imuBias::ConstantBias()); // CHANGE BACK TO COMBINED (Combined<->Imu)
+    imu_preintegrated = new PreintegratedCombinedMeasurements(p, imuBias::ConstantBias()); // CHANGE BACK TO COMBINED (Combined<->Imu)
   }
 
 };
