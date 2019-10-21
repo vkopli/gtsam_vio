@@ -68,7 +68,7 @@ using namespace gtsam;
 
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
-  string imu_topic_id = "/zed/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
+  string imu_topic_id = "/zed/zed_node/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
   string world_frame_id = "world";
   string camera_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
 };
