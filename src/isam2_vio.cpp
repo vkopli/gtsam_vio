@@ -66,6 +66,7 @@ struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
   string imu_topic_id = "/zed/zed_node/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
   string camera_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
+  string world_frame_id = "world";
 };
 
 // CALLBACK WRAPPER CLASS
@@ -84,6 +85,7 @@ private:
   
   // Publishers
   ros::Publisher feature_cloud_camera_pub; 
+  ros::Publisher feature_cloud_world_pub; 
 
   // Create iSAM2 object
   unique_ptr<ISAM2> isam;
@@ -102,6 +104,7 @@ private:
   double resolution_y;
   Cal3_S2Stereo::shared_ptr K; // Camera calibration intrinsic matrix
   double Tx;                   // Camera calibration extrinsic: distance from cam0 to cam1  
+  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
   
   // Noise models
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
@@ -114,6 +117,7 @@ public:
 
     // initialize PointCloud publisher
     this->feature_cloud_camera_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_camera", 1000);
+    this->feature_cloud_world_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_world", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
     vector<double> cam0_intrinsics(4);
@@ -132,7 +136,10 @@ public:
     vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
-    ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1"));
+    vector<double> T_cam_imu(16);
+    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
+    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
+    T_cam_imu_mat = move(T_cam_imu_mat_copy);
     
     // Set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
@@ -145,10 +152,13 @@ public:
     isam.reset(new ISAM2(parameters));
 
     // Print to confirm reading the YAML file correctly
+    ROS_INFO("cam1/T_cn_cnm1 exists? %d", nh_ptr->hasParam("cam1/T_cn_cnm1"));
+    ROS_INFO("Tx: %f", Tx);
     ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
       cam0_intrinsics[2], cam0_intrinsics[3]);
-    ROS_INFO("Tx: %f", Tx);
+    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
+    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
@@ -166,9 +176,10 @@ public:
     
     // Create object to publish PointCloud estimates of features in this pose
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
-      Point3 world_point = processFeature(feature_vector[i], feature_cloud_camera_msg_ptr, prev_optimized_pose);
+      Point3 world_point = processFeature(feature_vector[i], prev_optimized_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr);
     }
     
     // Publish feature PointCloud messages
@@ -176,6 +187,10 @@ public:
     feature_cloud_camera_msg_ptr->height = 1;
     feature_cloud_camera_msg_ptr->width = feature_cloud_camera_msg_ptr->points.size();
     this->feature_cloud_camera_pub.publish(feature_cloud_camera_msg_ptr); 
+    feature_cloud_world_msg_ptr->header.frame_id = lv.world_frame_id;
+    feature_cloud_world_msg_ptr->height = 1;
+    feature_cloud_world_msg_ptr->width = feature_cloud_world_msg_ptr->points.size();
+    this->feature_cloud_world_pub.publish(feature_cloud_world_msg_ptr); 
     
     // Print info about this pose to console
     Eigen::Matrix<double,4,1> centroid;
@@ -224,8 +239,9 @@ public:
   // Add node for feature if not already there and connect to current pose with a factor
   // Add estimated world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
-                      pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr,
-                      Pose3 prev_optimized_pose) {
+                        Pose3 prev_optimized_pose,
+                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr,
+                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr) {
 
     Point3 world_point;
 
@@ -248,16 +264,24 @@ public:
     double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
-    // Add location in camera frame to PointCloud
+    // transform the most recent IMU pose estimate to the estimated camera pose
+    Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
+    
+    // transform landmark coordinates from camera frame to world frame using estimated camera pose
+    world_point = prev_optimized_camera_pose.transform_from(camera_point);
+    
+    // Add location in camera and world frame to PointCloud
     pcl::PointXYZ pcl_camera_point = pcl::PointXYZ(camera_point.x(), camera_point.y(), camera_point.z());
-    feature_cloud_camera_msg_ptr->points.push_back(pcl_camera_point); 
+    feature_cloud_camera_msg_ptr->points.push_back(pcl_camera_point);   
+    pcl::PointXYZ pcl_world_point = pcl::PointXYZ(world_point.x(), world_point.y(), world_point.z());
+    feature_cloud_world_msg_ptr->points.push_back(pcl_world_point);  
 
 		// Add node value for feature/landmark if it doesn't already exist
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
-//      ROS_INFO("first time seeing feature %d", landmark_id); 
-      world_point = prev_optimized_pose.transform_from(camera_point); 
       newNodes.insert(landmark, world_point);
+//      cout << "feature[" << feature.id << "] in camera frame: " << camera_point << endl;
+//      cout << "feature[" << feature.id << "] in imu frame: " << prev_optimized_pose.transform_to(world_point) << endl;
     }
     
     // Add factor from this frame's pose to the feature/landmark
