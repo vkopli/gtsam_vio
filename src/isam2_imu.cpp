@@ -11,8 +11,8 @@
 
 #include <legged_vio/CameraMeasurement.h>
 #include <sensor_msgs/Imu.h>
-#include <tf/transform_broadcaster.h> // **
-#include <tf_conversions/tf_eigen.h> // **
+#include <tf/transform_broadcaster.h> 
+#include <tf_conversions/tf_eigen.h> 
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_ros/point_cloud.h>
@@ -92,7 +92,7 @@ private:
   shared_ptr<ros::NodeHandle> nh_ptr;
     
   // Publishers
-  tf::TransformBroadcaster tf_pub; // **
+  tf::TransformBroadcaster tf_pub;
 
   // Create iSAM2 object
   unique_ptr<ISAM2> isam;
@@ -222,7 +222,7 @@ public:
        // Reset the IMU preintegration object // **
       imu_preintegrated->resetIntegrationAndSetBias(prev_optimized_bias); 
           
-      // Get optimized nodes for next iteration // ** (moved and altered from isam2.cpp)
+      // Get optimized nodes for next iteration
       prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
       prev_optimized_velocity = optimizedNodes.at<Vector3>(Symbol('v', pose_id));
       prev_optimized_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id));
@@ -239,7 +239,7 @@ public:
     publishTf(prev_optimized_pose, prev_imu_timestamp);
   }
   
-  void publishTf(Pose3 &prev_optimized_pose, ros::Time &imu_timestamp) {
+  void publishTf(Pose3 &prev_optimized_pose, ros::Time &timestamp) {
     
     LaunchVariables lv;
     
@@ -249,7 +249,7 @@ public:
     tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, imu_timestamp, lv.world_frame_id, lv.robot_frame_id));
+          world_to_imu_tf, timestamp, lv.world_frame_id, lv.robot_frame_id));
   }
   
   void initializeIMUParameters(const ImuConstPtr& imu_msg) { // **

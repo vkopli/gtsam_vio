@@ -11,6 +11,8 @@
 
 #include <legged_vio/CameraMeasurement.h>
 #include <sensor_msgs/Imu.h>
+#include <tf/transform_broadcaster.h> 
+#include <tf_conversions/tf_eigen.h> 
 
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_ros/point_cloud.h>
@@ -86,6 +88,7 @@ private:
   // Publishers
   ros::Publisher feature_cloud_camera_pub; 
   ros::Publisher feature_cloud_world_pub; 
+  tf::TransformBroadcaster tf_pub;
 
   // Create iSAM2 object
   unique_ptr<ISAM2> isam;
@@ -166,8 +169,6 @@ public:
     // Add node value for current pose with initial estimate being previous pose
     if (pose_id == 0 || pose_id == 1) {
       prev_optimized_pose = Pose3();
-    } else {
-      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id - 1));
     } 
     newNodes.insert(Symbol('x', pose_id), prev_optimized_pose);
 
@@ -230,9 +231,28 @@ public:
       // Clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
       newNodes.clear();
+      
+      // Get optimized nodes for next iteration 
+      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
     }
 
+    ros::Time timestamp = camera_msg->header.stamp;
     pose_id++;
+    
+    publishTf(prev_optimized_pose, timestamp);
+  }
+
+  void publishTf(Pose3 &prev_optimized_pose, ros::Time &timestamp) {
+    
+    LaunchVariables lv;
+    
+    tf::Quaternion q_tf;
+    tf::Vector3 t_tf;
+    tf::quaternionEigenToTF(prev_optimized_pose.rotation().toQuaternion(), q_tf);
+    tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
+    tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
+    tf_pub.sendTransform(tf::StampedTransform(
+          world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id)); // CHANGE TO robot_frame_id IN ISAM2.cpp
   }
 
 
