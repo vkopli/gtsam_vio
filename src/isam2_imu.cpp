@@ -213,7 +213,7 @@ public:
 
       // Update the node values that have been seen up to this point
       optimizedNodes = isam->calculateEstimate();
-      optimizedNodes.print("Current estimate: ");
+//      optimizedNodes.print("Current estimate: ");
 
       // Clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
@@ -226,6 +226,11 @@ public:
       prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
       prev_optimized_velocity = optimizedNodes.at<Vector3>(Symbol('v', pose_id));
       prev_optimized_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id));
+      
+      ROS_INFO("frame %d", pose_id);
+      cout << "Pose Estimate: \n" << prev_optimized_pose << endl;
+      cout << "Velocity Estimate: \n" << prev_optimized_velocity << endl;
+      cout << "Bias Estimate: \n" << prev_optimized_bias << endl;
     }
 
     prev_imu_timestamp = imu_msg->header.stamp;
