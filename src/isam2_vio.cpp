@@ -264,11 +264,11 @@ public:
     double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
-    // transform the most recent IMU pose estimate to the estimated camera pose
-    Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
+//    // transform the most recent IMU pose estimate to the estimated camera pose
+//    Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
     
     // transform landmark coordinates from camera frame to world frame using estimated camera pose
-    world_point = prev_optimized_camera_pose.transform_from(camera_point);
+    world_point = prev_optimized_pose.transform_from(camera_point); // CHANGE TO prev_optimized_camera_pose IN ISAM2.cpp (AND COMMENT IN ABOVE 2 LINES)
     
     // Add location in camera and world frame to PointCloud
     pcl::PointXYZ pcl_camera_point = pcl::PointXYZ(camera_point.x(), camera_point.y(), camera_point.z());
