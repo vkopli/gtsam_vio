@@ -71,8 +71,10 @@ using namespace gtsam;
 // can't use remapped topic names from image_processor_zed.launch bc not using same NodeHandle
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
-  string imu_topic_id = "/zed/zed_node/imu/data_raw"; // "/imu0" for euroc data
-  string camera_frame_id = "zed_left_camera_optical_frame"; // "map" for euroc data
+  string imu_topic_id = "/zed/imu/data_raw"; // "/zed/..." or "/zed/zed_node/..."
+  string camera_frame_id = "zed_left_camera_optical_frame";
+  string world_frame_id = "world";
+  string robot_frame_id = "robot";
 };
 
 // CALLBACK WRAPPER CLASS
@@ -109,9 +111,9 @@ private:
     
   // Noise models // ** (pose_noise is a duplicate variable)
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas(
-    (Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished() // rad,rad,rad,m, m, m
+    (Vector(6) << 0.01, 0.01, 0.01, 0.5, 0.5, 0.5).finished() // (roll,pitch,yaw in rad; std on x,y,z in meters)
   );
-  noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3,0.1); // m/s
+  noiseModel::Diagonal::shared_ptr velocity_noise = noiseModel::Isotropic::Sigma(3,0.1); // (dim, sigma in m/s)
   noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6,1e-3);
 
 public:
@@ -234,13 +236,15 @@ public:
   
   void publishTf(Pose3 &prev_optimized_pose, ros::Time &imu_timestamp) {
     
+    LaunchVariables lv;
+    
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
     tf::quaternionEigenToTF(prev_optimized_pose.rotation().toQuaternion(), q_tf);
     tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, imu_timestamp, "world", "robot"));
+          world_to_imu_tf, imu_timestamp, lv.world_frame_id, lv.robot_frame_id));
   }
   
   void initializeIMUParameters(const ImuConstPtr& imu_msg) { // **

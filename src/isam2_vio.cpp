@@ -64,8 +64,8 @@ using namespace gtsam;
 // can't use remapped topic names from image_processor_zed.launch bc not using same NodeHandle
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
-  string imu_topic_id = "/zed/zed_node/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
-  string camera_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
+  string imu_topic_id = "/zed/imu/data_raw"; // "/zed/..." or "/zed/zed_node/..."
+  string camera_frame_id = "zed_left_camera_optical_frame";
   string world_frame_id = "world";
 };
 

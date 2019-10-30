@@ -68,9 +68,10 @@ using namespace gtsam;
 
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
-  string imu_topic_id = "/zed/zed_node/imu/data_raw"; // "/zed/imu/data_raw"; // "/imu0"
+  string imu_topic_id = "/zed/imu/data_raw"; // "/zed/..." or "/zed/zed_node/..."
   string world_frame_id = "world";
-  string camera_frame_id = "zed_left_camera_optical_frame"; // "zed_left_camera_optical_frame"; // "map"
+  string robot_frame_id = "robot";
+  string camera_frame_id = "zed_left_camera_optical_frame";
 };
 
 // CALLBACK WRAPPER CLASS
@@ -369,6 +370,8 @@ public:
   } 
   
   void publishTf(Pose3 &prev_optimized_pose, ros::Time &imu_timestamp) {
+    
+    LaunchVariables lv;
   
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
@@ -376,7 +379,7 @@ public:
     tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, imu_timestamp, "world", "robot"));
+          world_to_imu_tf, imu_timestamp, lv.world_frame_id, lv.robot_frame_id));
   }
   
   void initializeIMUParameters(const ImuConstPtr& imu_msg) { 
@@ -395,7 +398,9 @@ public:
     std::cout << "Linear Acceleration Covariance Matrix: " << std::endl << lin_acc_cov_mat << std::endl; 
     
     // Assign IMU preintegration parameters 
-    boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p =  PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0); 
+
+    boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p =  PreintegratedCombinedMeasurements::Params::MakeSharedU(); 
+    p->n_gravity = gtsam::Vector3(-imu_msg->linear_acceleration.x, -imu_msg->linear_acceleration.y, -imu_msg->linear_acceleration.z);
     p->accelerometerCovariance = lin_acc_cov_mat;
     p->integrationCovariance = Matrix33::Identity(3,3) * 1e-8; // (DON'T USE "orient_cov_mat": ALL ZEROS)
     p->gyroscopeCovariance = ang_vel_cov_mat; 
