@@ -148,7 +148,7 @@ public:
     this->resolution_x = cam0_resolution[0];
     this->resolution_y = cam0_resolution[1];
     
-    // YAML extrinsics (distance between 2 cameras)
+    // YAML extrinsics (distance between 2 cameras and transform between imu and camera))
     vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
