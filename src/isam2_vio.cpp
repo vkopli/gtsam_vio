@@ -290,6 +290,11 @@ public:
     // transform landmark coordinates from camera frame to world frame using estimated camera pose
     world_point = prev_optimized_pose.transform_from(camera_point); // CHANGE TO prev_optimized_camera_pose IN ISAM2.cpp (AND COMMENT IN ABOVE 2 LINES)
     
+    // if feature is behind camera, don't add to isam2 graph/feature messages
+    if (camera_point[2] < 0) {
+      return world_point;
+    }
+    
     // Add location in camera and world frame to PointCloud
     pcl::PointXYZ pcl_camera_point = pcl::PointXYZ(camera_point.x(), camera_point.y(), camera_point.z());
     feature_cloud_camera_msg_ptr->points.push_back(pcl_camera_point);   

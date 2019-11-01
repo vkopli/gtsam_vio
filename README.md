@@ -18,11 +18,11 @@ run ISAM2 for CAMERA VIO alone
 - rosrun legged_vio isam2_vio
 -------------------------------------------------------
 visualize estimated pose and 3D locations of features in world frame (isam2/isam2_vio)
-- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_imu_vio_config.rviz 
+- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_features_config.rviz 
 visualize estimated IMU pose in world frame (isam2_imu)
-- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_imu_config.rviz 
+- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_config.rviz 
 visualize estimated 3D locations of features in camera frame (isam2_vio)
-- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_vio_camera_frame_config.rviz 
+- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_features_camera_config.rviz 
 -------------------------------------------------------
 play bagfile of data collected from ZED camera for IMU and image information
 - rosbag play ~/bagfiles/Kalibr_data.bag 
