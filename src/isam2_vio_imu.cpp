@@ -8,6 +8,7 @@
 
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
 
 #include <sensor_msgs/Imu.h>
 #include <tf/transform_broadcaster.h>
@@ -42,11 +43,10 @@
 // In GTSAM, measurement functions are represented as 'factors'. Several common factors
 // have been provided with the library for solving robotics/SLAM/Bundle Adjustment problems.
 #include <gtsam/slam/PriorFactor.h>
+#include <gtsam/slam/StereoFactor.h>
 #include <gtsam/navigation/ImuFactor.h> 
 #include <gtsam/navigation/CombinedImuFactor.h> 
 #include <gtsam/slam/BetweenFactor.h> 
-#include <gtsam/slam/StereoFactor.h>
-#include <gtsam/slam/ProjectionFactor.h>
 
 // ADDITIONAL INCLUDES
 /* ************************************************************************* */
@@ -68,7 +68,7 @@ using namespace gtsam;
 
 struct LaunchVariables {
   string feature_topic_id = "minitaur/image_processor/features";
-  string imu_topic_id = "/zed/imu/data_raw"; // "/zed/..." or "/zed/zed_node/..."
+  string imu_topic_id = "/zed/zed_node/imu/data"; 
   string world_frame_id = "world";
   string robot_frame_id = "robot";
   string camera_frame_id = "zed_left_camera_optical_frame";
@@ -432,7 +432,8 @@ int main(int argc, char **argv) {
   // Subscribe to "features" and "imu" topics simultaneously
   message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, lv.feature_topic_id, 1); 
   message_filters::Subscriber<Imu> imu_sub(*nh_ptr, lv.imu_topic_id, 1); 
-  TimeSynchronizer<CameraMeasurement, Imu> sync(feature_sub, imu_sub, 10);
+  typedef sync_policies::ApproximateTime<CameraMeasurement, Imu> MySyncPolicy;
+  Synchronizer<MySyncPolicy> sync(MySyncPolicy(10000), feature_sub, imu_sub);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
   // Loop, pumping all callbacks (specified in subscriber object)
