@@ -1,7 +1,7 @@
 # State estimation for legged robots using GTSAM
 
 ## Preliminaries
-* This package uses the feature tracker and image processor nodelet included with [msckf_vio](https://github.com/KumarRobotics/msckf_vio).
+* This package uses the feature tracker and image processor nodelet included with [msckf_vio] (https://github.com/KumarRobotics/msckf_vio).
 
 ## Instructions to Run 
 
@@ -11,7 +11,7 @@ run launch file for image processor using ZED camera topic names
 - roslaunch legged_vio image_processor_minotaur_zed.launch
 -------------------------------------------------------
 run ISAM2 for combined CAMERA VIO and ZED CAMERA POSE
-- rosrun legged_vio isam2_vio_zedpose (TODO: need to add BetweenFactor, update topic names)
+- rosrun legged_vio isam2_vio_zedpose (TODO: need to add BetweenFactor)
 run ISAM2 for CAMERA VIO alone
 - rosrun legged_vio isam2_vio
 NOTE: isam2_imu and isam2_vio_imu not working well due to IMU readings not being precise (TODO: update topic names)
