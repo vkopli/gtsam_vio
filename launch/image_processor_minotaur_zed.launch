@@ -27,26 +27,6 @@
       <param name="track_precision" value="0.01"/>
       <param name="ransac_threshold" value="3"/>
       <param name="stereo_threshold" value="5"/>
-      
-      <!-- START: eventually move these lines to legged_vio_zed.launch -->
-      <!-- These values should be standard deviation -->
-      <param name="noise/gyro" value="0.005"/>
-      <param name="noise/acc" value="0.05"/>
-      <param name="noise/gyro_bias" value="0.001"/>
-      <param name="noise/acc_bias" value="0.01"/>
-      <param name="noise/feature" value="0.035"/>
-
-      <param name="initial_state/velocity/x" value="0.0"/>
-      <param name="initial_state/velocity/y" value="0.0"/>
-      <param name="initial_state/velocity/z" value="0.0"/>
-
-      <!-- These values should be covariance -->
-      <param name="initial_covariance/velocity" value="0.25"/>
-      <param name="initial_covariance/gyro_bias" value="0.01"/>
-      <param name="initial_covariance/acc_bias" value="0.01"/>
-      <param name="initial_covariance/extrinsic_rotation_cov" value="3.0462e-4"/>
-      <param name="initial_covariance/extrinsic_translation_cov" value="2.5e-5"/>
-      <!-- END: eventually move these lines to legged_vio_zed.launch -->
 
       <!-- This nodelet subscribes to imu, cam0_image, and cam1_image topics -->
       <!-- Remap to the topics that are published by stereo camera: -->
@@ -58,3 +38,25 @@
   </group>
 
 </launch>
+
+<?ignore
+  <!-- START: unusued parameters intitially intended for isam2 -->
+  <!-- These values should be standard deviation -->
+  <param name="noise/gyro" value="0.005"/>
+  <param name="noise/acc" value="0.05"/>
+  <param name="noise/gyro_bias" value="0.001"/>
+  <param name="noise/acc_bias" value="0.01"/>
+  <param name="noise/feature" value="0.035"/>
+
+  <param name="initial_state/velocity/x" value="0.0"/>
+  <param name="initial_state/velocity/y" value="0.0"/>
+  <param name="initial_state/velocity/z" value="0.0"/>
+
+  <!-- These values should be covariance -->
+  <param name="initial_covariance/velocity" value="0.25"/>
+  <param name="initial_covariance/gyro_bias" value="0.01"/>
+  <param name="initial_covariance/acc_bias" value="0.01"/>
+  <param name="initial_covariance/extrinsic_rotation_cov" value="3.0462e-4"/>
+  <param name="initial_covariance/extrinsic_translation_cov" value="2.5e-5"/>
+  <!-- END: unusued parameters intitially intended for isam2 -->
+?>
