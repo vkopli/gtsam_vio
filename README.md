@@ -14,7 +14,7 @@ run ISAM2 for combined CAMERA VIO and ZED CAMERA POSE
 - rosrun legged_vio isam2_vio_zedpose (TODO: need to add BetweenFactor)
 run ISAM2 for CAMERA VIO alone
 - rosrun legged_vio isam2_vio
-NOTE: isam2_imu and isam2_vio_imu not working well due to IMU readings not being precise (TODO: update topic names)
+NOTE: isam2_imu and isam2_vio_imu not working well due to IMU readings not being precise
 -------------------------------------------------------
 uncompress ZED image data
 rosrun image_transport republish compressed in:=/zed/zed_node/left/image_rect_color raw out:=/zed/zed_node/left/image_rect_color
