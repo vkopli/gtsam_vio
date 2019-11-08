@@ -1,9 +1,11 @@
 <launch>
 
+  <arg name="isam2_node" default="$isam2_vio"/>
   <arg name="robot" default="minitaur"/>
   <arg name="calibration_file"
     default="$(find legged_vio)/config/zed_imu_camera_altered.yaml"/>
 
+  <!-- Load calibration_file for any node outside of Image Processor  -->
   <rosparam command="load" file="$(arg calibration_file)"/>
 
   <!-- Image Processor Nodelet  -->
@@ -48,9 +50,9 @@
 
       <!-- This nodelet subscribes to imu, cam0_image, and cam1_image topics -->
       <!-- Remap to the topics that are published by stereo camera: -->
-      <remap from="~imu" to="/zed/zed_node/imu/data"/> <!--"/zed/..." or "/zed/zed_node/..." data_raw -->
-      <remap from="~cam0_image" to="/zed/zed_node/left/image_rect_color"/> <!--"/zed/..." or "/zed/zed_node/..." -->
-      <remap from="~cam1_image" to="/zed/zed_node/right/image_rect_color"/> <!--"/zed/..." or "/zed/zed_node/..." -->
+      <remap from="~imu" to="/zed/zed_node/imu/data"/> 
+      <remap from="~cam0_image" to="/zed/zed_node/left/image_rect_color"/>
+      <remap from="~cam1_image" to="/zed/zed_node/right/image_rect_color"/>
 
     </node>
   </group>
