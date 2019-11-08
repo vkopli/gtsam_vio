@@ -102,6 +102,7 @@ bool ImageProcessor::loadParameters() {
 
   // Processor parameters
   nh.param<int>("grid_row", processor_config.grid_row, 4);
+  
   nh.param<int>("grid_col", processor_config.grid_col, 4);
   nh.param<int>("grid_min_feature_num",
       processor_config.grid_min_feature_num, 2);

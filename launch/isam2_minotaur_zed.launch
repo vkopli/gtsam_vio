@@ -1,19 +1,23 @@
 <launch>
 
-  <arg name="isam2_node" default="$isam2_vio"/>
+  <arg name="isam2_node" default="isam2_vio"/>
+  <arg name="images_compressed" default="true"/>
+  
   <arg name="robot" default="minitaur"/>
   <arg name="calibration_file"
     default="$(find legged_vio)/config/zed_imu_camera_altered.yaml"/>
-
+  <arg name="left_camera" default="/zed/zed_node/left/image_rect_color"/>
+  <arg name="right_camera" default="/zed/zed_node/right/image_rect_color"/>
+  
   <!-- Load calibration_file for any node outside of Image Processor  -->
   <rosparam command="load" file="$(arg calibration_file)"/>
-
-  <!-- Image Processor Nodelet  -->
+  
   <group ns="$(arg robot)">
     
+    <!-- Image Processor Nodelet  -->
+    <!--  (NOTE: to print output, include output="screen" command)  -->
     <node pkg="nodelet" type="nodelet" name="image_processor"
-      args="standalone legged_vio/ImageProcessorNodelet"
-      output="screen">
+      args="standalone legged_vio/ImageProcessorNodelet"> <!--output="screen"-->
       
       <rosparam command="load" file="$(arg calibration_file)"/>
       <param name="grid_row" value="4"/>
@@ -29,13 +33,27 @@
       <param name="stereo_threshold" value="5"/>
 
       <!-- This nodelet subscribes to imu, cam0_image, and cam1_image topics -->
-      <!-- Remap to the topics that are published by stereo camera: -->
+      <!-- Remap to the topics that are published by zed camera: -->
       <remap from="~imu" to="/zed/zed_node/imu/data"/> 
-      <remap from="~cam0_image" to="/zed/zed_node/left/image_rect_color"/>
-      <remap from="~cam1_image" to="/zed/zed_node/right/image_rect_color"/>
+      <remap from="~cam0_image" to="$(arg left_camera)"/>
+      <remap from="~cam1_image" to="$(arg right_camera)"/>
 
     </node>
+          
+    <!-- Uncompress images if compressed  -->
+    <node name="republish_left" type="republish" pkg="image_transport"
+      args="compressed in:=$(arg left_camera) raw out:=$(arg left_camera)" 
+      if ="$(eval arg('images_compressed'))"/>
+    <node name="republish_right" type="republish" pkg="image_transport"
+      args="compressed in:=$(arg right_camera) raw out:=$(arg right_camera)"
+      if ="$(eval arg('images_compressed'))"/>
+    
   </group>
+  
+  <!-- ISAM2 Node  -->
+  <!--  (NOTE: to print output, include output="screen" command)  -->
+  <node pkg="legged_vio" name="$(arg isam2_node)" type="$(arg isam2_node)" 
+    required="true" output="screen"/>
 
 </launch>
 

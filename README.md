@@ -3,29 +3,38 @@
 ## Preliminaries
 * This package uses the feature tracker and image processor nodelet included with [msckf_vio] (https://github.com/KumarRobotics/msckf_vio).
 
+## Instructions to Change Parameters
+-------------------------------------------------------
+To change which isam2 node is being run:
+- isam2_vio_zedpose - run ISAM2 for combined CAMERA VIO and ZED CAMERA POSE (TODO: need to add BetweenFactor)
+- isam2_vio - run ISAM2 for CAMERA VIO alone
+- isam2_vio_imu - run ISAM2 for combined CAMERA VIO and ZED IMU alone (bad performance)
+- isam2_imu - run ISAM2 for ZED IMU alone (bad performance)
+change "isam2_node" argument to node name (e.g. "isam2_vio") in "isam2_minotaur_zed.launch"
+-------------------------------------------------------
+To run using raw images:
+- change "images_compressed" argument to "false" in "isam2_minotaur_zed.launch"
+-------------------------------------------------------
+
 ## Instructions to Run 
 
-using "Kalibr_minotaur_zed.bag" ZED bagfile (collected):
+USING "Kalibr_minotaur_zed.bag" ZED BAGFILE (COLLECTED):
 -------------------------------------------------------
 run launch file for image processor using ZED camera topic names
-- roslaunch legged_vio image_processor_minotaur_zed.launch
--------------------------------------------------------
-run ISAM2 for combined CAMERA VIO and ZED CAMERA POSE
-- rosrun legged_vio isam2_vio_zedpose (TODO: need to add BetweenFactor)
-run ISAM2 for CAMERA VIO alone
-- rosrun legged_vio isam2_vio
-NOTE: isam2_imu and isam2_vio_imu not working well due to IMU readings not being precise
--------------------------------------------------------
-uncompress ZED image data
-rosrun image_transport republish compressed in:=/zed/zed_node/left/image_rect_color raw out:=/zed/zed_node/left/image_rect_color
-rosrun image_transport republish compressed in:=/zed/zed_node/right/image_rect_color raw out:=/zed/zed_node/right/image_rect_color
--------------------------------------------------------
-visualize estimated pose and 3D locations of features in world frame (isam2_vio/isam2_vio_imu)
-- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_features_config.rviz 
-visualize just estimated 3D locations of features in camera frame (isam2_vio/isam2_vio_imu)
-- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_features_camera_config.rviz 
-visualize just estimated pose in world frame (isam2_imu)
-- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_config.rviz 
+- roslaunch legged_vio isam2_minotaur_zed.launch
 -------------------------------------------------------
 play bagfile of data collected from ZED camera for IMU and image information
 - rosbag play "path-to-bagfile"
+-------------------------------------------------------
+
+## Instructions to Visualize
+-------------------------------------------------------
+visualize estimated pose and 3D locations of features in world frame (isam2_vio/isam2_vio_imu)
+- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_features_config.rviz 
+-------------------------------------------------------
+visualize just estimated 3D locations of features in camera frame (isam2_vio/isam2_vio_imu)
+- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_features_camera_config.rviz
+------------------------------------------------------- 
+visualize just estimated pose in world frame (isam2_imu)
+- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_config.rviz 
+-------------------------------------------------------
