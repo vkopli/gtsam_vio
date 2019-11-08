@@ -5,10 +5,10 @@
 
 ## Instructions to Run 
 
-using "Kalibr_minotaur.bag" ZED bagfile (collected):
+using "Kalibr_minotaur_zed.bag" ZED bagfile (collected):
 -------------------------------------------------------
 run launch file for image processor using ZED camera topic names
-- roslaunch legged_vio image_processor_zed.launch
+- roslaunch legged_vio image_processor_minotaur_zed.launch
 -------------------------------------------------------
 run ISAM2 for combined CAMERA VIO and ZED CAMERA POSE
 - rosrun legged_vio isam2_vio_zedpose (TODO: need to add BetweenFactor, update topic names)
