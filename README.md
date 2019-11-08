@@ -28,4 +28,4 @@ visualize just estimated pose in world frame (isam2_imu)
 - rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_config.rviz 
 -------------------------------------------------------
 play bagfile of data collected from ZED camera for IMU and image information
-- rosbag play ~/bagfiles/Kalibr_data.bag 
+- rosbag play "path-to-bagfile"
