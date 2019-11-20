@@ -175,12 +175,6 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
 
-    // Add node value for current pose with initial estimate being previous pose
-    if (pose_id == 0 || pose_id == 1) {
-      prev_optimized_pose = Pose3();
-    } 
-    newNodes.insert(Symbol('x', pose_id), prev_optimized_pose);
-
     // Use ZED odometry message
     boost::array<double, 36> orient_cov = odom_msg->pose.covariance; // 9 for each: (x,y,z), rotation about x, rotation about y, rotation about z
     geometry_msgs::Pose pose_msg = odom_msg->pose.pose; 
@@ -189,6 +183,12 @@ public:
     Pose3 curr_pose = Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
                             Vector3(pos.x, pos.y, pos.z));  
     ROS_INFO("frame %d, ZED position: (%f, %f, %f)", pose_id, pos.x, pos.y, pos.z);
+
+    // Add node value for current pose with initial estimate being previous pose
+    if (pose_id == 0 || pose_id == 1) {
+      prev_optimized_pose = curr_pose;
+    } 
+    newNodes.insert(Symbol('x', pose_id), prev_optimized_pose);
 
     // Use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
@@ -219,7 +219,7 @@ public:
     if (pose_id == 0) {
 
       // Add prior on pose x0 (zero pose is used to set world frame)
-      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), Pose3(), pose_noise);
+      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), curr_pose, pose_noise);
 
       // Indicate that all node values seen in pose 0 have been seen for next iteration 
       optimizedNodes = newNodes; 
@@ -307,7 +307,7 @@ public:
     double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
-    // transform the most recent IMU pose estimate to the estimated camera pose
+    // transform the most recent ZED pose estimate to the estimated camera pose
     Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
     
     // transform landmark coordinates from camera frame to world frame using estimated camera pose
