@@ -11,7 +11,7 @@
 #include <message_filters/sync_policies/approximate_time.h>
 
 #include <legged_vio/CameraMeasurement.h>
-#include <sensor_msgs/Imu.h>
+#include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h> 
 #include <tf_conversions/tf_eigen.h> 
 
@@ -44,6 +44,7 @@
 // have been provided with the library for solving robotics/SLAM/Bundle Adjustment problems.
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/StereoFactor.h>
+#include <gtsam/slam/BetweenFactor.h>
 
 // ADDITIONAL INCLUDES
 /* ************************************************************************* */
@@ -66,7 +67,7 @@ using namespace gtsam;
 // topics and frame names being subscribed from or published to
 struct LaunchVariables {
   string feature_topic_id;
-  string imu_topic_id; 
+  string odom_topic_id; 
   string world_frame_id;
   string robot_frame_id;
   string camera_frame_id;
@@ -106,7 +107,7 @@ private:
   double resolution_y;
   Cal3_S2Stereo::shared_ptr K; // Camera calibration intrinsic matrix
   double Tx;                   // Camera calibration extrinsic: distance from cam0 to cam1  
-//  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
+  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
   
   // Noise models
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
@@ -121,9 +122,9 @@ public:
  
     // load topic and frame names
     nh_ptr->getParam("feature_topic_id", lv.feature_topic_id);
-    nh_ptr->getParam("imu_topic_id", lv.imu_topic_id);
+    nh_ptr->getParam("odom_topic_id", lv.odom_topic_id);
     nh_ptr->getParam("camera_frame_id", lv.camera_frame_id);
- //   nh_ptr->getParam("robot_frame_id", lv.robot_frame_id);
+    nh_ptr->getParam("robot_frame_id", lv.robot_frame_id);
     nh_ptr->getParam("world_frame_id", lv.world_frame_id);
  
     // initialize PointCloud publisher
@@ -147,10 +148,10 @@ public:
     vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
-//    vector<double> T_cam_imu(16);
-//    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
-//    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
-//    T_cam_imu_mat = move(T_cam_imu_mat_copy);
+    vector<double> T_cam_imu(16);
+    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
+    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
+    T_cam_imu_mat = move(T_cam_imu_mat_copy);
     
     // Set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
@@ -168,17 +169,26 @@ public:
     ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
       cam0_intrinsics[2], cam0_intrinsics[3]);
-//    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
-//    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
+    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
+    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
   }
 
-  void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
+  void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
 
     // Add node value for current pose with initial estimate being previous pose
     if (pose_id == 0 || pose_id == 1) {
       prev_optimized_pose = Pose3();
     } 
     newNodes.insert(Symbol('x', pose_id), prev_optimized_pose);
+
+    // Use ZED odometry message
+    boost::array<double, 36> orient_cov = odom_msg->pose.covariance; // 9 for each: (x,y,z), rotation about x, rotation about y, rotation about z
+    geometry_msgs::Pose pose_msg = odom_msg->pose.pose; 
+    geometry_msgs::Quaternion orient = pose_msg.orientation; // fields: x, y, z, w
+    geometry_msgs::Point pos = pose_msg.position;            // fields: x, y, z
+    Pose3 curr_pose = Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
+                            Vector3(pos.x, pos.y, pos.z));  
+    ROS_INFO("frame %d, ZED position: (%f, %f, %f)", pose_id, pos.x, pos.y, pos.z);
 
     // Use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
@@ -204,7 +214,7 @@ public:
     // Print info about this pose to console
     Eigen::Matrix<double,4,1> centroid;
     pcl::compute3DCentroid(*feature_cloud_camera_msg_ptr, centroid); // find centroid position of PointCloud
-    ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", pose_id, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
+//    ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", pose_id, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
           
     if (pose_id == 0) {
 
@@ -215,6 +225,13 @@ public:
       optimizedNodes = newNodes; 
 
     } else {
+    
+//       graph.emplace_shared< BetweenFactor<Pose> >(
+//         Symbol('x', pose_id - 1), 
+//         Symbol('x', pose_id    ), 
+//         pose_change, 
+//         pose_noise // change this to use the covariance from pose message
+//       );
     
       // UPDATE ISAM WITH NEW FACTORS AND NODES FROM THIS POSE 
       
@@ -258,7 +275,7 @@ public:
     tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id)); // CHANGE TO robot_frame_id IN ISAM2.cpp
+          world_to_imu_tf, timestamp, lv.world_frame_id, lv.robot_frame_id)); 
   }
 
 
@@ -290,11 +307,11 @@ public:
     double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
-//    // transform the most recent IMU pose estimate to the estimated camera pose
-//    Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
+    // transform the most recent IMU pose estimate to the estimated camera pose
+    Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
     
     // transform landmark coordinates from camera frame to world frame using estimated camera pose
-    world_point = prev_optimized_pose.transform_from(camera_point); // CHANGE TO prev_optimized_camera_pose IN ISAM2.cpp (AND COMMENT IN ABOVE 2 LINES)
+    world_point = prev_optimized_camera_pose.transform_from(camera_point); 
     
     // if feature is behind camera, don't add to isam2 graph/feature messages
     if (camera_point[2] < 0) {
@@ -341,9 +358,9 @@ int main(int argc, char **argv) {
 
   // Subscribe to "features" and "imu" topics simultaneously
   message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, lv.feature_topic_id, 1); 
-  message_filters::Subscriber<Imu> imu_sub(*nh_ptr, lv.imu_topic_id, 1); 
-  typedef sync_policies::ApproximateTime<CameraMeasurement, Imu> MySyncPolicy;
-  Synchronizer<MySyncPolicy> sync(MySyncPolicy(10000), feature_sub, imu_sub);
+  message_filters::Subscriber<nav_msgs::Odometry> odom_sub(*nh_ptr, lv.odom_topic_id, 1); 
+  typedef sync_policies::ApproximateTime<CameraMeasurement, nav_msgs::Odometry> MySyncPolicy;
+  Synchronizer<MySyncPolicy> sync(MySyncPolicy(10000), feature_sub, odom_sub);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
   // Loop, pumping all callbacks (specified in subscriber object)

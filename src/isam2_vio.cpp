@@ -11,7 +11,7 @@
 #include <message_filters/sync_policies/approximate_time.h>
 
 #include <legged_vio/CameraMeasurement.h>
-#include <sensor_msgs/Imu.h>
+#include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h> 
 #include <tf_conversions/tf_eigen.h> 
 
@@ -66,7 +66,7 @@ using namespace gtsam;
 // topics and frame names being subscribed from or published to
 struct LaunchVariables {
   string feature_topic_id;
-  string imu_topic_id; 
+  string odom_topic_id; 
   string world_frame_id;
   string robot_frame_id;
   string camera_frame_id;
@@ -121,7 +121,7 @@ public:
  
     // load topic and frame names
     nh_ptr->getParam("feature_topic_id", lv.feature_topic_id);
-    nh_ptr->getParam("imu_topic_id", lv.imu_topic_id);
+    nh_ptr->getParam("odom_topic_id", lv.odom_topic_id);
     nh_ptr->getParam("camera_frame_id", lv.camera_frame_id);
  //   nh_ptr->getParam("robot_frame_id", lv.robot_frame_id);
     nh_ptr->getParam("world_frame_id", lv.world_frame_id);
@@ -172,7 +172,7 @@ public:
 //    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
   }
 
-  void callback(const CameraMeasurementConstPtr& camera_msg, const ImuConstPtr& imu_msg) {
+  void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
 
     // Add node value for current pose with initial estimate being previous pose
     if (pose_id == 0 || pose_id == 1) {
@@ -341,9 +341,9 @@ int main(int argc, char **argv) {
 
   // Subscribe to "features" and "imu" topics simultaneously
   message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, lv.feature_topic_id, 1); 
-  message_filters::Subscriber<Imu> imu_sub(*nh_ptr, lv.imu_topic_id, 1); 
-  typedef sync_policies::ApproximateTime<CameraMeasurement, Imu> MySyncPolicy;
-  Synchronizer<MySyncPolicy> sync(MySyncPolicy(10000), feature_sub, imu_sub);
+  message_filters::Subscriber<nav_msgs::Odometry> odom_sub(*nh_ptr, lv.odom_topic_id, 1); 
+  typedef sync_policies::ApproximateTime<CameraMeasurement, nav_msgs::Odometry> MySyncPolicy;
+  Synchronizer<MySyncPolicy> sync(MySyncPolicy(10000), feature_sub, odom_sub);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
   // Loop, pumping all callbacks (specified in subscriber object)

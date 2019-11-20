@@ -84,7 +84,7 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES image_processor
   CATKIN_DEPENDS
-    roscpp std_msgs tf nav_msgs sensor_msgs geometry_msgs
+    roscpp std_msgs tf nav_msgs sensor_msgs geometry_msgs nav_msgs
     eigen_conversions tf_conversions random_numbers message_runtime
     image_transport cv_bridge message_filters pcl_conversions
     pcl_ros std_srvs

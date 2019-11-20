@@ -13,6 +13,7 @@
   <rosparam command="load" file="$(arg calibration_file)"/>
   <param name="feature_topic_id" value="/minitaur/image_processor/features"/>
   <param name="imu_topic_id" value="/zed/zed_node/imu/data"/>
+  <param name="odom_topic_id" value="/zed/zed_node/odom"/>
   <param name="camera_frame_id" value="zed_left_camera_optical_frame"/>
   <param name="robot_frame_id" value="robot"/>
   <param name="world_frame_id" value="world"/>
