@@ -68,13 +68,13 @@ using namespace gtsam;
 // PARAMETERS TO SPECIFY FOR OTHER NODES
 /* ************************************************************************* */
 
-// can't use remapped topic names from image_processor_zed.launch bc not using same NodeHandle
+// topics and frame names being subscribed from or published to
 struct LaunchVariables {
-  string feature_topic_id = "minitaur/image_processor/features";
-  string imu_topic_id = "/zed/zed_node/imu/data"; 
-  string camera_frame_id = "zed_left_camera_optical_frame";
-  string world_frame_id = "world";
-  string robot_frame_id = "robot";
+  string feature_topic_id;
+  string imu_topic_id; 
+  string world_frame_id;
+  string robot_frame_id;
+  string camera_frame_id;
 };
 
 // CALLBACK WRAPPER CLASS
@@ -83,8 +83,6 @@ struct LaunchVariables {
 class Callbacks { 
 
 private:
-
-  LaunchVariables lv;
   
   int pose_id = 0;
 
@@ -117,8 +115,17 @@ private:
   noiseModel::Diagonal::shared_ptr bias_noise = noiseModel::Isotropic::Sigma(6,1e-3);
 
 public:
+
+  LaunchVariables lv;
  
   Callbacks(shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(move(nh_ptr_copy)) {
+
+    // load topic and frame names
+    nh_ptr->getParam("feature_topic_id", lv.feature_topic_id);
+    nh_ptr->getParam("imu_topic_id", lv.imu_topic_id);
+    nh_ptr->getParam("camera_frame_id", lv.camera_frame_id);
+    nh_ptr->getParam("robot_frame_id", lv.robot_frame_id);
+    nh_ptr->getParam("world_frame_id", lv.world_frame_id);
 
     // iSAM2 settings
     ISAM2Params parameters;
@@ -241,8 +248,6 @@ public:
   
   void publishTf(Pose3 &prev_optimized_pose, ros::Time &timestamp) {
     
-    LaunchVariables lv;
-    
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
     tf::quaternionEigenToTF(prev_optimized_pose.rotation().toQuaternion(), q_tf);
@@ -291,13 +296,12 @@ public:
 /* ************************************************************************* */
 int main(int argc, char **argv) {
 
-  LaunchVariables lv;
-
   ros::init(argc, argv, "isam2"); // specify name of node and ROS arguments
   shared_ptr<ros::NodeHandle> nh_ptr = make_shared<ros::NodeHandle>();
 
   // Instantiate class containing callbacks and necessary variables
   Callbacks callbacks_obj(nh_ptr);
+  LaunchVariables lv = callbacks_obj.lv;
 
   // Subscribe to "features" and "imu" topics simultaneously
   message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, lv.feature_topic_id, 1); 

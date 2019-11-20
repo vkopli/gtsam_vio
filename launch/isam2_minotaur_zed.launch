@@ -1,5 +1,6 @@
 <launch>
 
+  <!-- ISAM2 Parameters  -->
   <arg name="isam2_node" default="isam2_vio"/>
   <arg name="images_compressed" default="true"/>
   
@@ -9,8 +10,12 @@
   <arg name="left_camera" default="/zed/zed_node/left/image_rect_color"/>
   <arg name="right_camera" default="/zed/zed_node/right/image_rect_color"/>
   
-  <!-- Load calibration_file for any node outside of Image Processor  -->
   <rosparam command="load" file="$(arg calibration_file)"/>
+  <param name="feature_topic_id" value="/minitaur/image_processor/features"/>
+  <param name="imu_topic_id" value="/zed/zed_node/imu/data"/>
+  <param name="camera_frame_id" value="zed_left_camera_optical_frame"/>
+  <param name="robot_frame_id" value="robot"/>
+  <param name="world_frame_id" value="world"/>
   
   <group ns="$(arg robot)">
     
