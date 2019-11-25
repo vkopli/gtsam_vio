@@ -23,6 +23,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# Set which node to build to execute ISAM2
+set(isam2_node "isam2_vio")
+
 cmake_minimum_required(VERSION 2.8.12)
 project(legged_vio)
 
@@ -134,25 +137,9 @@ target_link_libraries(image_processor_nodelet
 # custom ISAM2 nodes (TODO: move new launch params from image_processor_nodelet to new nodelet)
 
 # ISAM2 combined vision and zed pose node
-add_executable(isam2_vio_zedpose src/isam2_vio_zedpose.cpp)
-target_link_libraries(isam2_vio_zedpose ${catkin_LIBRARIES} gtsam)
-add_dependencies(isam2_vio_zedpose legged_vio_generate_messages_cpp)
-
-# ISAM2 vision node
-add_executable(isam2_vio src/isam2_vio.cpp)
-target_link_libraries(isam2_vio ${catkin_LIBRARIES} gtsam)
-add_dependencies(isam2_vio legged_vio_generate_messages_cpp)
-
-# ISAM2 combined vision and IMU node
-add_executable(isam2_vio_imu src/isam2_vio_imu.cpp)
-target_link_libraries(isam2_vio_imu ${catkin_LIBRARIES} gtsam)
-add_dependencies(isam2_vio_imu legged_vio_generate_messages_cpp)
-
-# ISAM2 IMU node
-add_executable(isam2_imu src/isam2_imu.cpp)
-target_link_libraries(isam2_imu ${catkin_LIBRARIES} gtsam)
-add_dependencies(isam2_imu legged_vio_generate_messages_cpp)
-
+add_executable(isam2 src/${isam2_node}.cpp)
+target_link_libraries(isam2 ${catkin_LIBRARIES} gtsam)
+add_dependencies(isam2 legged_vio_generate_messages_cpp)
 
 #############
 ## Install ##

@@ -6,24 +6,32 @@
 ## Instructions to Change Parameters
 -------------------------------------------------------
 To change which isam2 node is being run:
+change "isam2_node" variable in CMakeLists.txt to one of the below (e.g. "isam2_vio")
 - isam2_vio_zedpose - run ISAM2 for combined CAMERA VIO and ZED CAMERA POSE (TODO: need to add BetweenFactor)
 - isam2_vio - run ISAM2 for CAMERA VIO alone
 - isam2_vio_imu - run ISAM2 for combined CAMERA VIO and ZED IMU alone (bad performance)
 - isam2_imu - run ISAM2 for ZED IMU alone (bad performance)
-change "isam2_node" argument to node name (e.g. "isam2_vio") in "isam2_minotaur_zed.launch"
 -------------------------------------------------------
 To run using raw images:
 - change "images_compressed" argument to "false" in "isam2_minotaur_zed.launch"
 -------------------------------------------------------
 
 ## Instructions to Run 
-
-USING "Kalibr_minotaur_zed.bag" ZED BAGFILE (COLLECTED):
 -------------------------------------------------------
-run launch file for image processor using ZED camera topic names
+Should have the following topics:
+- /zed/zed_node/left/image_rect_color/compressed
+- /zed/zed_node/right/image_rect_color/compressed
+- /zed/zed_node/odom
+- /zed/zed_node/imu/data
+-------------------------------------------------------
+Might be helpful to have:
+- /zed/zed_node/left/camera_info
+- /zed/zed_node/right/camera_info
+-------------------------------------------------------
+Run launch file for image processor using ZED camera topic names:
 - roslaunch legged_vio isam2_minotaur_zed.launch
 -------------------------------------------------------
-play bagfile of data collected from ZED camera for IMU and image information
+Play bagfile of data collected from ZED camera for IMU and image information:
 - rosbag play "path-to-bagfile"
 -------------------------------------------------------
 
