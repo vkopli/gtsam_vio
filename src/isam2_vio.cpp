@@ -304,8 +304,8 @@ public:
     pcl::PointXYZ pcl_world_point = pcl::PointXYZ(world_point.x(), world_point.y(), world_point.z());
     feature_cloud_world_msg_ptr->points.push_back(pcl_world_point);  
 
-		// Add node value for feature/landmark if it doesn't already exist
-		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
+	// Add node value for feature/landmark if it doesn't already exist
+	bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
       newNodes.insert(landmark, world_point);
     }
