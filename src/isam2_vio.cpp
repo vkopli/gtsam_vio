@@ -96,7 +96,7 @@ private:
   NonlinearFactorGraph graph;
   Values newNodes;
   Values optimizedNodes;       // current estimate of values
-  Pose3 prev_optimized_pose;   // current estimate of previous pose
+  Pose3 prev_camera_pose;      // current estimate of previous pose
     
   // Initialize VIO Variables
   double f;                    // Camera calibration intrinsics
@@ -176,9 +176,9 @@ public:
 
     // Add node value for current pose with initial estimate being previous pose
     if (pose_id == 0 || pose_id == 1) {
-      prev_optimized_pose = Pose3();
+      prev_camera_pose = Pose3();
     } 
-    newNodes.insert(Symbol('x', pose_id), prev_optimized_pose);
+    newNodes.insert(Symbol('x', pose_id), prev_camera_pose);
 
     // Use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
@@ -188,7 +188,7 @@ public:
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
-      Point3 world_point = processFeature(feature_vector[i], prev_optimized_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr);
+      Point3 world_point = processFeature(feature_vector[i], prev_camera_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr);
     }
     
     // Publish feature PointCloud messages
@@ -241,31 +241,30 @@ public:
       newNodes.clear();
       
       // Get optimized nodes for next iteration 
-      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
+      prev_camera_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
     }
 
     ros::Time timestamp = camera_msg->header.stamp;
     pose_id++;
     
-    publishTf(prev_optimized_pose, timestamp);
+    publishTf(prev_camera_pose, timestamp);
   }
 
-  void publishTf(Pose3 &prev_optimized_pose, ros::Time &timestamp) {
+  void publishTf(Pose3 &camera_pose, ros::Time &timestamp) {
     
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
-    tf::quaternionEigenToTF(prev_optimized_pose.rotation().toQuaternion(), q_tf);
-    tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
+    tf::quaternionEigenToTF(camera_pose.rotation().toQuaternion(), q_tf); 
+    tf::vectorEigenToTF(camera_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id)); // CHANGE TO robot_frame_id IN ISAM2.cpp
+          world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id)); // CHANGE TO robot_frame_id IN ISAM2.cpp (and all instances of camera_pose to robot_pose)
   }
 
-
   // Add node for feature if not already there and connect to current pose with a factor
-  // Add estimated world coordinate of feature to PointCloud (estimated from previous pose)
+  // Add world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
-                        Pose3 prev_optimized_pose,
+                        Pose3 prev_camera_pose,
                         pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr,
                         pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr) {
 
@@ -290,11 +289,9 @@ public:
     double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
-//    // transform the most recent IMU pose estimate to the estimated camera pose
-//    Pose3 prev_optimized_camera_pose = prev_optimized_pose.compose(Pose3(T_cam_imu_mat));
-    
-    // transform landmark coordinates from camera frame to world frame using estimated camera pose
-    world_point = prev_optimized_pose.transform_from(camera_point); // CHANGE TO prev_optimized_camera_pose IN ISAM2.cpp (AND COMMENT IN ABOVE 2 LINES)
+    // transform landmark coordinates to world frame
+//    Pose3 prev_robot_pose = prev_camera_pose.compose(Pose3(T_cam_imu_mat));
+    world_point = prev_camera_pose.transform_from(camera_point); // CHANGE TO prev_robot_pose IN ISAM2.cpp (and all instances of prev_camera_pose to prev_robot_pose)
     
     // if feature is behind camera, don't add to isam2 graph/feature messages
     if (camera_point[2] < 0) {
@@ -311,8 +308,6 @@ public:
 		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
       newNodes.insert(landmark, world_point);
-//      cout << "feature[" << feature.id << "] in camera frame: " << camera_point << endl;
-//      cout << "feature[" << feature.id << "] in imu frame: " << prev_optimized_pose.transform_to(world_point) << endl;
     }
     
     // Add factor from this frame's pose to the feature/landmark
@@ -339,7 +334,7 @@ int main(int argc, char **argv) {
   Callbacks callbacks_obj(nh_ptr);
   LaunchVariables lv = callbacks_obj.lv;
 
-  // Subscribe to "features" and "imu" topics simultaneously
+  // Subscribe to "features" and "ZED odom" topics simultaneously
   message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, lv.feature_topic_id, 1); 
   message_filters::Subscriber<nav_msgs::Odometry> odom_sub(*nh_ptr, lv.odom_topic_id, 1); 
   typedef sync_policies::ApproximateTime<CameraMeasurement, nav_msgs::Odometry> MySyncPolicy;

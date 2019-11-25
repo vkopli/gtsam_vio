@@ -99,9 +99,9 @@ private:
   NonlinearFactorGraph graph;
   Values newNodes;
   Values optimizedNodes; // current estimate of values
-  Pose3 prev_optimized_pose; // current estimate of previous pose
-  Vector3 prev_optimized_velocity; // **
-  imuBias::ConstantBias prev_optimized_bias; // **
+  Pose3 prev_robot_pose; // current estimate of previous pose
+  Vector3 prev_robot_velocity; // **
+  imuBias::ConstantBias prev_robot_bias; // **
   
   // Initialize IMU Variables // **
   PreintegratedCombinedMeasurements* imu_preintegrated; // CHANGE BACK TO COMBINED (Combined<->Imu)
@@ -152,18 +152,17 @@ public:
 
       // Add priors (pose, velocity, and bias) // ** (altered from isam2.cpp)
       Rot3 prior_rotation = Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w); // quaternion -> Rot3
-      prev_optimized_pose = Pose3(prior_rotation, Point3(0,0,0)); // start at origin with IMU's starting rotation
-      prev_optimized_velocity = Vector3();
-      prev_optimized_bias = imuBias::ConstantBias();
-      newNodes.insert(Symbol('x', 0), prev_optimized_pose);
-      newNodes.insert(Symbol('v', 0), prev_optimized_velocity);
-      newNodes.insert(Symbol('b', 0), prev_optimized_bias);
-      graph.emplace_shared< PriorFactor<Pose3> >(Symbol('x', 0), prev_optimized_pose, pose_noise);
-      graph.emplace_shared< PriorFactor<Vector3> >(Symbol('v', 0), prev_optimized_velocity, velocity_noise);
-      graph.emplace_shared< PriorFactor<imuBias::ConstantBias> >(Symbol('b', 0), prev_optimized_bias, bias_noise);
+      prev_robot_pose = Pose3(prior_rotation, Point3(0,0,0)); // start at origin with IMU's starting rotation
+      prev_robot_velocity = Vector3();
+      prev_robot_bias = imuBias::ConstantBias();
+      newNodes.insert(Symbol('x', 0), prev_robot_pose);
+      newNodes.insert(Symbol('v', 0), prev_robot_velocity);
+      newNodes.insert(Symbol('b', 0), prev_robot_bias);
+      graph.emplace_shared< PriorFactor<Pose3> >(Symbol('x', 0), prev_robot_pose, pose_noise);
+      graph.emplace_shared< PriorFactor<Vector3> >(Symbol('v', 0), prev_robot_velocity, velocity_noise);
+      graph.emplace_shared< PriorFactor<imuBias::ConstantBias> >(Symbol('b', 0), prev_robot_bias, bias_noise);
 
-      //** "optimizedNodes = newNodes;" (deleted from isam2.cpp)
-      
+      //** "optimizedNodes = newNodes;" (deleted from isam2_vio.cpp)     
 
     } else {
       
@@ -196,11 +195,11 @@ public:
      );
   
       // Predict initial estimates for current state // **
-      NavState prev_optimized_state = NavState(prev_optimized_pose, prev_optimized_velocity);
-      NavState propagated_state = imu_preintegrated->predict(prev_optimized_state, prev_optimized_bias);
-      newNodes.insert(Symbol('x', pose_id), propagated_state.pose()); 
-      newNodes.insert(Symbol('v', pose_id), propagated_state.v()); 
-      newNodes.insert(Symbol('b', pose_id), prev_optimized_bias); 
+      NavState prev_robot_state = NavState(prev_robot_pose, prev_robot_velocity);
+      NavState propagated_robot_state = imu_preintegrated->predict(prev_robot_state, prev_robot_bias);
+      newNodes.insert(Symbol('x', pose_id), propagated_robot_state.pose()); 
+      newNodes.insert(Symbol('v', pose_id), propagated_robot_state.v()); 
+      newNodes.insert(Symbol('b', pose_id), prev_robot_bias); 
 
       // UPDATE ISAM WITH NEW FACTORS AND NODES FROM THIS POSE 
       isam->update(graph, newNodes); 
@@ -227,31 +226,31 @@ public:
       newNodes.clear();
 
        // Reset the IMU preintegration object // **
-      imu_preintegrated->resetIntegrationAndSetBias(prev_optimized_bias); 
+      imu_preintegrated->resetIntegrationAndSetBias(prev_robot_bias); 
           
       // Get optimized nodes for next iteration
-      prev_optimized_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
-      prev_optimized_velocity = optimizedNodes.at<Vector3>(Symbol('v', pose_id));
-      prev_optimized_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id));
+      prev_robot_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
+      prev_robot_velocity = optimizedNodes.at<Vector3>(Symbol('v', pose_id));
+      prev_robot_bias = optimizedNodes.at<imuBias::ConstantBias>(Symbol('b', pose_id));
       
       ROS_INFO("frame %d", pose_id);
-      cout << "Pose Estimate: \n" << prev_optimized_pose << endl;
-      cout << "Velocity Estimate: \n" << prev_optimized_velocity << endl;
-      cout << "Bias Estimate: \n" << prev_optimized_bias << endl;
+      cout << "Pose Estimate: \n" << prev_robot_pose << endl;
+      cout << "Velocity Estimate: \n" << prev_robot_velocity << endl;
+      cout << "Bias Estimate: \n" << prev_robot_bias << endl;
     }
 
     prev_imu_timestamp = imu_msg->header.stamp;
     pose_id++;
     
-    publishTf(prev_optimized_pose, prev_imu_timestamp);
+    publishTf(prev_robot_pose, prev_imu_timestamp);
   }
   
-  void publishTf(Pose3 &prev_optimized_pose, ros::Time &timestamp) {
+  void publishTf(Pose3 &robot_pose, ros::Time &timestamp) {
     
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
-    tf::quaternionEigenToTF(prev_optimized_pose.rotation().toQuaternion(), q_tf);
-    tf::vectorEigenToTF(prev_optimized_pose.translation().vector(), t_tf);
+    tf::quaternionEigenToTF(robot_pose.rotation().toQuaternion(), q_tf);
+    tf::vectorEigenToTF(robot_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
           world_to_imu_tf, timestamp, lv.world_frame_id, lv.robot_frame_id));
@@ -281,12 +280,12 @@ public:
     // Assign IMU preintegration parameters 
     boost::shared_ptr<PreintegratedCombinedMeasurements::Params> p =  PreintegratedCombinedMeasurements::Params::MakeSharedU(); 
     p->n_gravity = gtsam::Vector3(-imu_msg->linear_acceleration.x, -imu_msg->linear_acceleration.y, -imu_msg->linear_acceleration.z);
-    p->accelerometerCovariance = lin_acc_cov_mat; //Matrix33::Identity(3,3) * pow(0.0003924,2);
-    p->integrationCovariance = Matrix33::Identity(3,3)*1e-8; //orient_cov_mat; (DON'T USE "orient_cov_mat": ALL ZEROS)
-    p->gyroscopeCovariance = ang_vel_cov_mat; //Matrix33::Identity(3,3) * pow(0.000205689024915,2); 
-    p->biasAccCovariance = Matrix33::Identity(3,3) * pow(0.004905,2); //Matrix33::Identity(3,3) *  1e-5; 
-    p->biasOmegaCovariance = Matrix33::Identity(3,3) * pow(0.000001454441043,2); //Matrix33::Identity(3,3) * 1e-5;; 
-    p->biasAccOmegaInt = Matrix::Identity(6,6)*1e-5; //Matrix::Identity(6,6) * 1e-5; 
+    p->accelerometerCovariance = lin_acc_cov_mat;
+    p->integrationCovariance = Matrix33::Identity(3,3)*1e-8; // (DON'T USE "orient_cov_mat": ALL ZEROS)
+    p->gyroscopeCovariance = ang_vel_cov_mat; 
+    p->biasAccCovariance = Matrix33::Identity(3,3)*pow(0.004905,2);
+    p->biasOmegaCovariance = Matrix33::Identity(3,3)*pow(0.000001454441043,2); 
+    p->biasAccOmegaInt = Matrix::Identity(6,6)*1e-5; 
     imu_preintegrated = new PreintegratedCombinedMeasurements(p, imuBias::ConstantBias()); // CHANGE BACK TO COMBINED (Combined<->Imu)
   }
 
