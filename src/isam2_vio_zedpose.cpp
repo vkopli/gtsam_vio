@@ -98,6 +98,7 @@ private:
   Values newNodes;
   Values optimizedNodes;       // current estimate of values
   Pose3 prev_robot_pose;       // current estimate of previous pose
+  Pose3 prev_robot_odom;       // previous pose outputted by ZED camera
     
   // Initialize VIO Variables
   double f;                    // Camera calibration intrinsics
@@ -175,18 +176,21 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
 
-    // Use ZED odometry message
+    // Get ZED odometry message and transform to Pose3
     boost::array<double, 36> orient_cov = odom_msg->pose.covariance; // 9 for each: (x,y,z), rotation about x, rotation about y, rotation about z
     geometry_msgs::Pose pose_msg = odom_msg->pose.pose; 
     geometry_msgs::Quaternion orient = pose_msg.orientation; // fields: x, y, z, w
     geometry_msgs::Point pos = pose_msg.position;            // fields: x, y, z
-    Pose3 curr_pose = Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
-                            Vector3(pos.x, pos.y, pos.z));  
+    Pose3 curr_robot_odom = Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
+                            Vector3(pos.x, pos.y, pos.z)); 
+    if (pose_id == 0) {
+        prev_robot_odom = curr_robot_odom;
+    }                        
     ROS_INFO("frame %d, ZED position: (%f, %f, %f)", pose_id, pos.x, pos.y, pos.z);
 
     // Add node value for current pose with initial estimate being previous pose
     if (pose_id == 0 || pose_id == 1) {
-      prev_robot_pose = curr_pose;
+      prev_robot_pose = curr_robot_odom;
     } 
     newNodes.insert(Symbol('x', pose_id), prev_robot_pose);
 
@@ -219,19 +223,22 @@ public:
     if (pose_id == 0) {
 
       // Add prior on pose x0 (zero pose is used to set world frame)
-      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), curr_pose, pose_noise);
+      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), curr_robot_odom, pose_noise);
 
       // Indicate that all node values seen in pose 0 have been seen for next iteration 
       optimizedNodes = newNodes; 
 
     } else {
-    
-//       graph.emplace_shared< BetweenFactor<Pose> >(
-//         Symbol('x', pose_id - 1), 
-//         Symbol('x', pose_id    ), 
-//         pose_change, 
-//         pose_noise // change this to use the covariance from pose message
-//       );
+       
+      ROS_INFO("frame %d, curr odom: (%f, %f, %f)", pose_id, curr_robot_odom.x(), curr_robot_odom.y(), curr_robot_odom.z());
+      Pose3 delta_robot_odom = prev_robot_odom.between(curr_robot_odom);
+      ROS_INFO("frame %d, delta odom: (%f, %f, %f)", pose_id, delta_robot_odom.x(), delta_robot_odom.y(), delta_robot_odom.z());
+//      graph.emplace_shared< BetweenFactor<Pose> >(
+//        Symbol('x', pose_id - 1), 
+//        Symbol('x', pose_id    ), 
+//        delta_robot_odom, 
+//        pose_noise // change this to use the covariance from pose message
+//      );
     
       // UPDATE ISAM WITH NEW FACTORS AND NODES FROM THIS POSE 
       
@@ -259,6 +266,7 @@ public:
       
       // Get optimized nodes for next iteration 
       prev_robot_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
+      prev_robot_odom = curr_robot_odom;
     }
 
     ros::Time timestamp = camera_msg->header.stamp;
@@ -307,8 +315,8 @@ public:
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
     // transform landmark coordinates to world frame 
-    Pose3 prev_camera_pose = prev_robot_pose.compose(Pose3(T_cam_imu_mat));
-    world_point = prev_camera_pose.transform_from(camera_point); 
+//    Pose3 prev_camera_pose = prev_robot_pose.compose(Pose3(T_cam_imu_mat));
+    world_point = prev_robot_pose.transform_from(camera_point); // CHANGE TO prev_camera_pose and uncomment above line when using ZED odom
     
     // if feature is behind camera, don't add to isam2 graph/feature messages
     if (camera_point[2] < 0) {

@@ -24,7 +24,7 @@
 # SOFTWARE.
 
 # Set which node to build to execute ISAM2
-set(isam2_node "isam2_vio")
+set(isam2_node "isam2_vio_zedpose")
 
 cmake_minimum_required(VERSION 2.8.12)
 project(legged_vio)
