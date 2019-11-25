@@ -97,8 +97,8 @@ private:
   NonlinearFactorGraph graph;
   Values newNodes;
   Values optimizedNodes;       // current estimate of values
-  Pose3 prev_robot_pose;       // current estimate of previous pose
-  Pose3 prev_robot_odom;       // previous pose outputted by ZED camera
+  Pose3 prev_camera_pose;       // current estimate of previous pose
+  Pose3 prev_camera_odom;       // previous pose outputted by ZED camera
     
   // Initialize VIO Variables
   double f;                    // Camera calibration intrinsics
@@ -108,7 +108,7 @@ private:
   double resolution_y;
   Cal3_S2Stereo::shared_ptr K; // Camera calibration intrinsic matrix
   double Tx;                   // Camera calibration extrinsic: distance from cam0 to cam1  
-  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
+//  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
   
   // Noise models
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
@@ -125,7 +125,7 @@ public:
     nh_ptr->getParam("feature_topic_id", lv.feature_topic_id);
     nh_ptr->getParam("odom_topic_id", lv.odom_topic_id);
     nh_ptr->getParam("camera_frame_id", lv.camera_frame_id);
-    nh_ptr->getParam("robot_frame_id", lv.robot_frame_id);
+//    nh_ptr->getParam("robot_frame_id", lv.robot_frame_id);
     nh_ptr->getParam("world_frame_id", lv.world_frame_id);
  
     // initialize PointCloud publisher
@@ -149,10 +149,10 @@ public:
     vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
-    vector<double> T_cam_imu(16);
-    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
-    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
-    T_cam_imu_mat = move(T_cam_imu_mat_copy);
+//    vector<double> T_cam_imu(16);
+//    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
+//    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
+//    T_cam_imu_mat = move(T_cam_imu_mat_copy);
     
     // Set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
@@ -170,8 +170,8 @@ public:
     ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
       cam0_intrinsics[2], cam0_intrinsics[3]);
-    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
-    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
+//    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
+//    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
@@ -181,18 +181,18 @@ public:
     geometry_msgs::Pose pose_msg = odom_msg->pose.pose; 
     geometry_msgs::Quaternion orient = pose_msg.orientation; // fields: x, y, z, w
     geometry_msgs::Point pos = pose_msg.position;            // fields: x, y, z
-    Pose3 curr_robot_odom = Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
+    Pose3 curr_camera_odom = Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
                             Vector3(pos.x, pos.y, pos.z)); 
     if (pose_id == 0) {
-        prev_robot_odom = curr_robot_odom;
+        prev_camera_odom = curr_camera_odom;
     }                        
     ROS_INFO("frame %d, ZED position: (%f, %f, %f)", pose_id, pos.x, pos.y, pos.z);
 
     // Add node value for current pose with initial estimate being previous pose
     if (pose_id == 0 || pose_id == 1) {
-      prev_robot_pose = curr_robot_odom;
+      prev_camera_pose = curr_camera_odom;
     } 
-    newNodes.insert(Symbol('x', pose_id), prev_robot_pose);
+    newNodes.insert(Symbol('x', pose_id), prev_camera_pose);
 
     // Use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     vector<FeatureMeasurement> feature_vector = camera_msg->features; 
@@ -202,7 +202,7 @@ public:
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
-      Point3 world_point = processFeature(feature_vector[i], prev_robot_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr);
+      Point3 world_point = processFeature(feature_vector[i], prev_camera_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr);
     }
     
     // Publish feature PointCloud messages
@@ -223,22 +223,23 @@ public:
     if (pose_id == 0) {
 
       // Add prior on pose x0 (zero pose is used to set world frame)
-      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), curr_robot_odom, pose_noise);
+      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), curr_camera_odom, pose_noise);
 
       // Indicate that all node values seen in pose 0 have been seen for next iteration 
       optimizedNodes = newNodes; 
 
     } else {
        
-      ROS_INFO("frame %d, curr odom: (%f, %f, %f)", pose_id, curr_robot_odom.x(), curr_robot_odom.y(), curr_robot_odom.z());
-      Pose3 delta_robot_odom = prev_robot_odom.between(curr_robot_odom);
-      ROS_INFO("frame %d, delta odom: (%f, %f, %f)", pose_id, delta_robot_odom.x(), delta_robot_odom.y(), delta_robot_odom.z());
-//      graph.emplace_shared< BetweenFactor<Pose> >(
-//        Symbol('x', pose_id - 1), 
-//        Symbol('x', pose_id    ), 
-//        delta_robot_odom, 
-//        pose_noise // change this to use the covariance from pose message
-//      );
+//      ROS_INFO("frame %d, curr odom: (%f, %f, %f)", pose_id, curr_camera_odom.x(), curr_camera_odom.y(), curr_camera_odom.z());
+//      ROS_INFO("frame %d, delta odom: (%f, %f, %f)", pose_id, delta_robot_odom.x(), delta_robot_odom.y(), delta_robot_odom.z());
+
+      Pose3 delta_robot_odom = prev_camera_odom.between(curr_camera_odom);
+      graph.emplace_shared< BetweenFactor<Pose3> >(
+        Symbol('x', pose_id - 1), 
+        Symbol('x', pose_id    ), 
+        delta_robot_odom, // change pose_noise to use the covariance from pose message
+        pose_noise
+      );
     
       // UPDATE ISAM WITH NEW FACTORS AND NODES FROM THIS POSE 
       
@@ -265,31 +266,31 @@ public:
       newNodes.clear();
       
       // Get optimized nodes for next iteration 
-      prev_robot_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
-      prev_robot_odom = curr_robot_odom;
+      prev_camera_pose = optimizedNodes.at<Pose3>(Symbol('x', pose_id));
+      prev_camera_odom = curr_camera_odom;
     }
 
     ros::Time timestamp = camera_msg->header.stamp;
     pose_id++;
     
-    publishTf(prev_robot_pose, timestamp);
+    publishTf(prev_camera_pose, timestamp);
   }
 
-  void publishTf(Pose3 &robot_pose, ros::Time &timestamp) {
+  void publishTf(Pose3 &camera_pose, ros::Time &timestamp) {
     
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
-    tf::quaternionEigenToTF(robot_pose.rotation().toQuaternion(), q_tf);
-    tf::vectorEigenToTF(robot_pose.translation().vector(), t_tf);
+    tf::quaternionEigenToTF(camera_pose.rotation().toQuaternion(), q_tf);
+    tf::vectorEigenToTF(camera_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, timestamp, lv.world_frame_id, lv.robot_frame_id)); 
+          world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id)); // CHANGE TO robot_frame_id IN ISAM2.cpp (and all instances of camera_pose to robot_pose)
   }
 
   // Add node for feature if not already there and connect to current pose with a factor
   // Add world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
-                        Pose3 prev_robot_pose,
+                        Pose3 prev_camera_pose,
                         pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr,
                         pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr) {
 
@@ -316,7 +317,7 @@ public:
     
     // transform landmark coordinates to world frame 
 //    Pose3 prev_camera_pose = prev_robot_pose.compose(Pose3(T_cam_imu_mat));
-    world_point = prev_robot_pose.transform_from(camera_point); // CHANGE TO prev_camera_pose and uncomment above line when using ZED odom
+    world_point = prev_camera_pose.transform_from(camera_point);  // CHANGE TO prev_robot_pose IN ISAM2.cpp (and all instances of prev_camera_pose to prev_robot_pose)
     
     // if feature is behind camera, don't add to isam2 graph/feature messages
     if (camera_point[2] < 0) {

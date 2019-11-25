@@ -7,7 +7,7 @@
 -------------------------------------------------------
 To change which isam2 node is being run:
 change "isam2_node" variable in CMakeLists.txt to one of the below (e.g. "isam2_vio")
-- isam2_vio_zedpose - run ISAM2 for combined CAMERA VIO and ZED CAMERA POSE (TODO: need to add BetweenFactor)
+- isam2_vio_zedpose - run ISAM2 for combined CAMERA VIO and ZED CAMERA POSE 
 - isam2_vio - run ISAM2 for CAMERA VIO alone
 - isam2_vio_imu - run ISAM2 for combined CAMERA VIO and ZED IMU alone (bad performance)
 - isam2_imu - run ISAM2 for ZED IMU alone (bad performance)
