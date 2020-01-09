@@ -169,7 +169,7 @@ public:
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
       cam0_intrinsics[2], cam0_intrinsics[3]);
 //    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
-//    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
+//    cout << "transform from camera to imu: " << endl << T_cam_imu_mat << endl;
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
