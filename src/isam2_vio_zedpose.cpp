@@ -86,7 +86,6 @@ private:
   shared_ptr<ros::NodeHandle> nh_ptr;
   
   // Publishers
-  ros::Publisher feature_cloud_camera_pub; 
   ros::Publisher feature_cloud_world_pub; 
   tf::TransformBroadcaster tf_pub;
 
@@ -108,7 +107,7 @@ private:
   double resolution_y;
   Cal3_S2Stereo::shared_ptr K; // Camera calibration intrinsic matrix
   double Tx;                   // Camera calibration extrinsic: distance from cam0 to cam1  
-//  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
+  gtsam::Matrix4 T_cam_imu_mat; // Transform to get to camera IMU frame from camera frame 
   
   // Noise models
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
@@ -129,7 +128,6 @@ public:
     nh_ptr->getParam("world_frame_id", lv.world_frame_id);
  
     // initialize PointCloud publisher
-    this->feature_cloud_camera_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_camera", 1000);
     this->feature_cloud_world_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_world", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
@@ -149,10 +147,10 @@ public:
     vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
-//    vector<double> T_cam_imu(16);
-//    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
-//    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
-//    T_cam_imu_mat = move(T_cam_imu_mat_copy);
+    vector<double> T_cam_imu(16);
+    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
+    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
+    T_cam_imu_mat = move(T_cam_imu_mat_copy);
     
     // Set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
@@ -170,8 +168,8 @@ public:
     ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
       cam0_intrinsics[2], cam0_intrinsics[3]);
-//    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
-//    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
+    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
+    cout << "transform from imu to camera: " << endl << T_cam_imu_mat << endl;
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
@@ -181,10 +179,10 @@ public:
     geometry_msgs::Pose pose_msg = odom_msg->pose.pose; 
     geometry_msgs::Quaternion orient = pose_msg.orientation; // fields: x, y, z, w
     geometry_msgs::Point pos = pose_msg.position;            // fields: x, y, z
-    Pose3 curr_camera_odom = Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
+    Pose3 curr_camera_odom = Pose3(T_cam_imu_mat) * Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
                             Vector3(pos.x, pos.y, pos.z)); 
     if (pose_id == 0) {
-        prev_camera_odom = curr_camera_odom;
+      prev_camera_odom = curr_camera_odom;
     }                        
     ROS_INFO("frame %d, ZED position: (%f, %f, %f)", pose_id, pos.x, pos.y, pos.z);
 
@@ -206,10 +204,6 @@ public:
     }
     
     // Publish feature PointCloud messages
-    feature_cloud_camera_msg_ptr->header.frame_id = lv.camera_frame_id;
-    feature_cloud_camera_msg_ptr->height = 1;
-    feature_cloud_camera_msg_ptr->width = feature_cloud_camera_msg_ptr->points.size();
-    this->feature_cloud_camera_pub.publish(feature_cloud_camera_msg_ptr); 
     feature_cloud_world_msg_ptr->header.frame_id = lv.world_frame_id;
     feature_cloud_world_msg_ptr->height = 1;
     feature_cloud_world_msg_ptr->width = feature_cloud_world_msg_ptr->points.size();
@@ -229,9 +223,6 @@ public:
       optimizedNodes = newNodes; 
 
     } else {
-       
-//      ROS_INFO("frame %d, curr odom: (%f, %f, %f)", pose_id, curr_camera_odom.x(), curr_camera_odom.y(), curr_camera_odom.z());
-//      ROS_INFO("frame %d, delta odom: (%f, %f, %f)", pose_id, delta_robot_odom.x(), delta_robot_odom.y(), delta_robot_odom.z());
 
       Pose3 delta_robot_odom = prev_camera_odom.between(curr_camera_odom);
       graph.emplace_shared< BetweenFactor<Pose3> >(
@@ -277,14 +268,13 @@ public:
   }
 
   void publishTf(Pose3 &camera_pose, ros::Time &timestamp) {
-    
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
     tf::quaternionEigenToTF(camera_pose.rotation().toQuaternion(), q_tf);
     tf::vectorEigenToTF(camera_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id)); // CHANGE TO robot_frame_id IN ISAM2.cpp (and all instances of camera_pose to robot_pose)
+          world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id));
   }
 
   // Add node for feature if not already there and connect to current pose with a factor
@@ -316,8 +306,7 @@ public:
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
     // transform landmark coordinates to world frame 
-//    Pose3 prev_camera_pose = prev_robot_pose.compose(Pose3(T_cam_imu_mat));
-    world_point = prev_camera_pose.transform_from(camera_point);  // CHANGE TO prev_robot_pose IN ISAM2.cpp (and all instances of prev_camera_pose to prev_robot_pose)
+    world_point = prev_camera_pose.transform_from(camera_point);
     
     // if feature is behind camera, don't add to isam2 graph/feature messages
     if (camera_point[2] < 0) {
