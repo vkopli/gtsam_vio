@@ -115,7 +115,7 @@ private:
   double resolution_y;
   Cal3_S2Stereo::shared_ptr K;  // Camera calibration intrinsic matrix
   double Tx;                    // Camera calibration extrinsic: distance from cam0 to cam1
-  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
+  gtsam::Matrix4 T_cam_imu_mat; // Transform to get to camera IMU frame from camera frame
     
   // Noise models
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas(
@@ -345,7 +345,7 @@ public:
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
     // transform landmark coordinates to world frame
-    Pose3 prev_camera_pose = prev_robot_pose.compose(Pose3(T_cam_imu_mat));
+    Pose3 prev_camera_pose = prev_robot_pose.compose(Pose3(T_cam_imu_mat).inverse()); // gtsam compose not working
     world_point = prev_camera_pose.transform_from(camera_point);
     
     // if feature is behind camera, don't add to isam2 graph/feature messages
