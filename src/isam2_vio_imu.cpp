@@ -239,9 +239,6 @@ public:
       // Print info about this pose to console
       double dt = (imu_msg->header.stamp - prev_imu_timestamp).toSec();
       ROS_INFO("frame %d, dt = %f ms, %lu total features", pose_id, dt*1000, feature_vector.size());
-//      Eigen::Matrix<double,4,1> centroid;
-//      pcl::compute3DCentroid(*feature_cloud_camera_msg_ptr, centroid); // find centroid position of PointCloud in camera frame
-//      ROS_INFO(", centroid in camera frame: (%f, %f, %f)", centroid[0], centroid[1], centroid[2]);
     
       // Integrate current reading from IMU
       imu_preintegrated->integrateMeasurement(
@@ -316,6 +313,17 @@ public:
     publishTf(prev_robot_pose, prev_imu_timestamp);
   }
 
+  void publishTf(Pose3 &robot_pose, ros::Time &imu_timestamp) {
+  
+    tf::Quaternion q_tf;
+    tf::Vector3 t_tf;
+    tf::quaternionEigenToTF(robot_pose.rotation().toQuaternion(), q_tf);
+    tf::vectorEigenToTF(robot_pose.translation().vector(), t_tf);
+    tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
+    tf_pub.sendTransform(tf::StampedTransform(
+          world_to_imu_tf, imu_timestamp, lv.world_frame_id, lv.robot_frame_id));
+  }
+
   // Add node for feature if not already there and connect to current pose with a factor
   // Add world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
@@ -345,7 +353,7 @@ public:
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
     // transform landmark coordinates to world frame
-    Pose3 prev_camera_pose = prev_robot_pose.compose(Pose3(T_cam_imu_mat).inverse()); // gtsam compose not working
+    Pose3 prev_camera_pose = Pose3(T_cam_imu_mat) * prev_robot_pose; 
     world_point = prev_camera_pose.transform_from(camera_point);
     
     // if feature is behind camera, don't add to isam2 graph/feature messages
@@ -359,8 +367,8 @@ public:
     pcl::PointXYZ pcl_world_point = pcl::PointXYZ(world_point.x(), world_point.y(), world_point.z());
     feature_cloud_world_msg_ptr->points.push_back(pcl_world_point);  
 
-		// Add node value for feature/landmark if it doesn't already exist
-		bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
+	// Add node value for feature/landmark if it doesn't already exist
+	bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
       newNodes.insert(landmark, world_point);
     }
@@ -375,17 +383,6 @@ public:
         
     return world_point;
   } 
-  
-  void publishTf(Pose3 &robot_pose, ros::Time &imu_timestamp) {
-  
-    tf::Quaternion q_tf;
-    tf::Vector3 t_tf;
-    tf::quaternionEigenToTF(robot_pose.rotation().toQuaternion(), q_tf);
-    tf::vectorEigenToTF(robot_pose.translation().vector(), t_tf);
-    tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
-    tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, imu_timestamp, lv.world_frame_id, lv.robot_frame_id));
-  }
   
   void initializeIMUParameters(const ImuConstPtr& imu_msg) { 
     
