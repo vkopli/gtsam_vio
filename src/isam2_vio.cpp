@@ -106,7 +106,7 @@ private:
   double resolution_y;
   Cal3_S2Stereo::shared_ptr K; // Camera calibration intrinsic matrix
   double Tx;                   // Camera calibration extrinsic: distance from cam0 to cam1  
-//  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from IMU frame to camera frame
+  gtsam::Matrix4 T_cam_imu_mat; // Transform to get from camera frame to camera IMU frame
   
   // Noise models
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
@@ -258,7 +258,7 @@ public:
     tf::vectorEigenToTF(camera_pose.translation().vector(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id)); // CHANGE TO robot_frame_id IN ISAM2.cpp (and all instances of camera_pose to robot_pose)
+      world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id)); 
   }
 
   // Add node for feature if not already there and connect to current pose with a factor
@@ -290,8 +290,7 @@ public:
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
     // transform landmark coordinates to world frame
-//    Pose3 prev_robot_pose = prev_camera_pose.compose(Pose3(T_cam_imu_mat));
-    world_point = prev_camera_pose.transform_from(camera_point); // CHANGE TO prev_robot_pose IN ISAM2.cpp (and all instances of prev_camera_pose to prev_robot_pose)
+    world_point = prev_camera_pose.transform_from(camera_point); 
     
     // if feature is behind camera, don't add to isam2 graph/feature messages
     if (camera_point[2] < 0) {
