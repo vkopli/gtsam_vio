@@ -179,8 +179,8 @@ public:
     geometry_msgs::Pose pose_msg = odom_msg->pose.pose; 
     geometry_msgs::Quaternion orient = pose_msg.orientation; // fields: x, y, z, w
     geometry_msgs::Point pos = pose_msg.position;            // fields: x, y, z
-    Pose3 curr_camera_odom = Pose3(T_cam_imu_mat) * Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
-                            Vector3(pos.x, pos.y, pos.z)); 
+    Pose3 curr_camera_odom = Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
+        Vector3(pos.x, pos.y, pos.z)) * Pose3(T_cam_imu_mat); 
     if (pose_id == 0) {
       prev_camera_odom = curr_camera_odom;
     }                        
