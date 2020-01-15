@@ -197,7 +197,7 @@ public:
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
-      Point3 world_point = processFeature(feature_vector[i], prev_camera_pose, feature_cloud_msg_ptr);
+      processFeature(feature_vector[i], prev_camera_pose, feature_cloud_msg_ptr);
     }
     
     // Publish feature PointCloud message (in world frame)
@@ -271,11 +271,9 @@ public:
 
   // Add node for feature if not already there and connect to current pose with a factor
   // Add world coordinate of feature to PointCloud (estimated from previous pose)
-  Point3 processFeature(FeatureMeasurement feature, 
+  void processFeature(FeatureMeasurement feature, 
                         Pose3 prev_camera_pose,
                         pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr) {
-
-    Point3 world_point;
 
     // Identify feature (may appear in previous/future frames) and mark as "seen"
     int landmark_id = feature.id;
@@ -296,13 +294,13 @@ public:
     double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
-    // transform landmark coordinates to world frame 
-    world_point = prev_camera_pose.transform_from(camera_point);
-    
     // if feature is behind camera, don't add to isam2 graph/feature messages
     if (camera_point[2] < 0) {
-      return world_point;
+      return;
     }
+            
+    // transform landmark coordinates to world frame 
+    Point3 world_point = prev_camera_pose.transform_from(camera_point);
     
     // Add feature to PointCloud (in world frame)
     pcl::PointXYZ pcl_point = pcl::PointXYZ(world_point.x(), world_point.y(), world_point.z());
@@ -319,10 +317,9 @@ public:
       GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
         pose_landmark_noise, Symbol('x', pose_id), landmark, K);
         
-    // Add prior to the landmark as well    
+    // Removing this causes greater accuracy but earlier gtsam::IndeterminantLinearSystemException)
+    // Add prior to the landmark as well 
     graph.emplace_shared<PriorFactor<Point3> >(landmark, world_point, landmark_noise);
-        
-    return world_point;
   } 
 
 };
