@@ -51,8 +51,9 @@
 
 #include <set>
 #include <vector>
-#include <memory>
 #include <map>
+#include <cmath> // sin
+#include <memory>
 #include <opencv2/opencv.hpp>
 
 using namespace legged_vio;
@@ -68,6 +69,12 @@ struct LaunchVariables {
   std::string world_frame_id;
   std::string robot_frame_id;
   std::string camera_frame_id;
+};
+
+struct RGBColor {
+  int r;
+  int g;
+  int b;
 };
 
 // CALLBACK WRAPPER CLASS
@@ -305,7 +312,8 @@ public:
     Point3 world_point = prev_camera_pose.transform_from(camera_point);
     
     // Add landmark to point cloud (in world frame)
-    pcl::PointXYZRGB pcl_point = pcl::PointXYZRGB(0, 255, 0);
+    RGBColor rgb = getLandmarkColor(landmark_id);
+    pcl::PointXYZRGB pcl_point = pcl::PointXYZRGB(rgb.r, rgb.g, rgb.b);
     pcl_point.x = world_point.x();
     pcl_point.y = world_point.y();
     pcl_point.z = world_point.z();
@@ -325,7 +333,20 @@ public:
     // Removing this causes greater accuracy but earlier gtsam::IndeterminantLinearSystemException)
     // Add prior to the landmark as well 
     graph.emplace_shared<PriorFactor<Point3> >(landmark, world_point, landmark_noise);
-  } 
+  }
+  
+  RGBColor getLandmarkColor(int id) {
+    double center = 128;
+    double width = 127;
+    double r_freq = 1.666;
+    double g_freq = 2.666;
+    double b_freq = 3.666;
+    RGBColor rgb;
+    rgb.r = std::sin(r_freq * (double) id) * width + center;
+    rgb.g = std::sin(g_freq * (double) id) * width + center;
+    rgb.b = std::sin(b_freq * (double) id) * width + center;
+    return rgb;
+  }
 
 };
 
