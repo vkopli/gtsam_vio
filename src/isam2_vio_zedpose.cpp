@@ -83,7 +83,7 @@ private:
   std::shared_ptr<ros::NodeHandle> nh_ptr;
   
   // Publishers
-  ros::Publisher feature_cloud_pub; 
+  ros::Publisher landmark_cloud_pub; 
   tf::TransformBroadcaster tf_pub;
 
   // Create iSAM2 object
@@ -125,8 +125,8 @@ public:
     nh_ptr->getParam("world_frame_id", lv.world_frame_id);
  
     // initialize PointCloud publisher
-    this->feature_cloud_pub = nh_ptr->advertise< 
-      pcl::PointCloud<pcl::PointXYZ> >("isam2_feature_point_cloud_world", 1000);
+    this->landmark_cloud_pub = nh_ptr->advertise< 
+      pcl::PointCloud<pcl::PointXYZRGB> >("isam2_feature_point_cloud_world", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
     std::vector<double> cam0_intrinsics(4);
@@ -193,18 +193,19 @@ public:
     // Use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
     std::vector<FeatureMeasurement> feature_vector = camera_msg->features; 
     
-    // Create object to publish PointCloud estimates of features in this pose
-    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
+    // Create object to publish PointCloud of landmarks
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr landmark_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
     
+    // Convert features from image_processor to landmarks with 3D coordinates and add to ISAM2 graph/point cloud
     for (int i = 0; i < feature_vector.size(); i++) { 
-      processFeature(feature_vector[i], prev_camera_pose, feature_cloud_msg_ptr);
+      featureToLandmark(feature_vector[i], prev_camera_pose, landmark_cloud_msg_ptr);
     }
     
-    // Publish feature PointCloud message (in world frame)
-    feature_cloud_msg_ptr->header.frame_id = lv.world_frame_id;
-    feature_cloud_msg_ptr->height = 1;
-    feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
-    this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 
+    // Publish landmark PointCloud message (in world frame)
+    landmark_cloud_msg_ptr->header.frame_id = lv.world_frame_id;
+    landmark_cloud_msg_ptr->height = 1;
+    landmark_cloud_msg_ptr->width = landmark_cloud_msg_ptr->points.size();
+    this->landmark_cloud_pub.publish(landmark_cloud_msg_ptr); 
           
     if (pose_id == 0) {
 
@@ -269,13 +270,14 @@ public:
           world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id));
   }
 
-  // Add node for feature if not already there and connect to current pose with a factor
-  // Add world coordinate of feature to PointCloud (estimated from previous pose)
-  void processFeature(FeatureMeasurement feature, 
-                        Pose3 prev_camera_pose,
-                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr) {
+  // Transform feature from image_processor to landmark with 3D coordinates
+  // Add landmark to ISAM2 graph if not already there (connect to current pose with a factor)
+  // Add landmark to point cloud 
+  void featureToLandmark(FeatureMeasurement feature, 
+                         Pose3 prev_camera_pose,
+                         pcl::PointCloud<pcl::PointXYZRGB>::Ptr feature_cloud_msg_ptr) {
 
-    // Identify feature (may appear in previous/future frames) and mark as "seen"
+    // Identify feature/landmark (may appear in previous/future frames) and mark as "seen"
     int landmark_id = feature.id;
     Symbol landmark = Symbol('l', landmark_id);
 
@@ -288,31 +290,34 @@ public:
     double y = v;
     double W = d / this->Tx;
 
-    // Estimated feature location in camera frame
+    // Estimated landmark location in camera frame
     double X_camera = (x - cx) / W;
     double Y_camera = (y - cy) / W;
     double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
     
-    // if feature is behind camera, don't add to isam2 graph/feature messages
+    // If landmark is behind camera, don't add to isam2 graph/point cloud
     if (camera_point[2] < 0) {
       return;
     }
             
-    // transform landmark coordinates to world frame 
+    // Transform landmark coordinates to world frame 
     Point3 world_point = prev_camera_pose.transform_from(camera_point);
     
-    // Add feature to PointCloud (in world frame)
-    pcl::PointXYZ pcl_point = pcl::PointXYZ(world_point.x(), world_point.y(), world_point.z());
+    // Add landmark to point cloud (in world frame)
+    pcl::PointXYZRGB pcl_point = pcl::PointXYZRGB(0, 255, 0);
+    pcl_point.x = world_point.x();
+    pcl_point.y = world_point.y();
+    pcl_point.z = world_point.z();
     feature_cloud_msg_ptr->points.push_back(pcl_point);  
 
-	  // Add node value for feature/landmark if it doesn't already exist
+	  // Add ISAM2 value for feature/landmark if it doesn't already exist
 	  bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
       newNodes.insert(landmark, world_point);
     }
     
-    // Add factor from this frame's pose to the feature/landmark
+    // Add ISAM2 factor connecting this frame's pose to the landmark
     graph.emplace_shared<
       GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
         pose_landmark_noise, Symbol('x', pose_id), landmark, K);
