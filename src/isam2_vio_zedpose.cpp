@@ -55,10 +55,7 @@
 #include <map>
 #include <opencv2/opencv.hpp>
 
-using namespace std;
-using namespace message_filters;
 using namespace legged_vio;
-using namespace sensor_msgs;
 using namespace gtsam;
 
 // PARAMETERS TO SPECIFY FOR OTHER NODES
@@ -66,11 +63,11 @@ using namespace gtsam;
 
 // topics and frame names being subscribed from or published to
 struct LaunchVariables {
-  string feature_topic_id;
-  string odom_topic_id; 
-  string world_frame_id;
-  string robot_frame_id;
-  string camera_frame_id;
+  std::string feature_topic_id;
+  std::string odom_topic_id; 
+  std::string world_frame_id;
+  std::string robot_frame_id;
+  std::string camera_frame_id;
 };
 
 // CALLBACK WRAPPER CLASS
@@ -83,14 +80,14 @@ private:
   int pose_id = 0;
 
   // Hold ROS node handle initialized in main
-  shared_ptr<ros::NodeHandle> nh_ptr;
+  std::shared_ptr<ros::NodeHandle> nh_ptr;
   
   // Publishers
   ros::Publisher feature_cloud_world_pub; 
   tf::TransformBroadcaster tf_pub;
 
   // Create iSAM2 object
-  unique_ptr<ISAM2> isam;
+  std::unique_ptr<ISAM2> isam;
 
   // Initialize factor graph and values estimates on nodes (continually updated by isam.update()) 
   NonlinearFactorGraph graph;
@@ -118,7 +115,7 @@ public:
 
   LaunchVariables lv;
  
-  Callbacks(shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(move(nh_ptr_copy)) {
+  Callbacks(std::shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(std::move(nh_ptr_copy)) {
  
     // load topic and frame names
     nh_ptr->getParam("feature_topic_id", lv.feature_topic_id);
@@ -131,26 +128,26 @@ public:
     this->feature_cloud_world_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_world", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
-    vector<double> cam0_intrinsics(4);
+    std::vector<double> cam0_intrinsics(4);
     nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); // <- neglect right camera 
     this->f = (cam0_intrinsics[0] + cam0_intrinsics[1]) / 2;
     this->cx = cam0_intrinsics[2];  
     this->cy = cam0_intrinsics[3];
     
     // YAML image resolution parameters (radtan): [k1 k2 r1 r2]
-    vector<double> cam0_resolution(2);
+    std::vector<double> cam0_resolution(2);
     nh_ptr->getParam("cam0/resolution", cam0_resolution); // <- neglect right camera
-    this->resolution_x =  cam0_resolution[0];
-    this->resolution_y =  cam0_resolution[1];
+    this->resolution_x = cam0_resolution[0];
+    this->resolution_y = cam0_resolution[1];
     
     // YAML extrinsics (distance between 2 cameras and transform between imu and camera)
-    vector<double> T_cam1(16);
+    std::vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
-    vector<double> T_cam_imu(16);
+    std::vector<double> T_cam_imu(16);
     nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
     gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
-    T_cam_imu_mat = move(T_cam_imu_mat_copy);
+    T_cam_imu_mat = std::move(T_cam_imu_mat_copy);
     
     // Set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
@@ -169,7 +166,7 @@ public:
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
       cam0_intrinsics[2], cam0_intrinsics[3]);
     ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
-    cout << "transform from camera to imu: " << endl << T_cam_imu_mat << endl;
+    std::cout << "transform from camera to imu: " << std::endl << T_cam_imu_mat << std::endl;
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
@@ -193,7 +190,7 @@ public:
     newNodes.insert(Symbol('x', pose_id), prev_camera_pose);
 
     // Use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
-    vector<FeatureMeasurement> feature_vector = camera_msg->features; 
+    std::vector<FeatureMeasurement> feature_vector = camera_msg->features; 
     
     // Create object to publish PointCloud estimates of features in this pose
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
@@ -343,7 +340,7 @@ public:
 int main(int argc, char **argv) {
 
   ros::init(argc, argv, "isam2"); // specify name of node and ROS arguments
-  shared_ptr<ros::NodeHandle> nh_ptr = make_shared<ros::NodeHandle>();
+  std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>();
 
   // Instantiate class containing callbacks and necessary variables
   Callbacks callbacks_obj(nh_ptr);
@@ -352,8 +349,8 @@ int main(int argc, char **argv) {
   // Subscribe to "features" and "ZED odom" topics simultaneously
   message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, lv.feature_topic_id, 1); 
   message_filters::Subscriber<nav_msgs::Odometry> odom_sub(*nh_ptr, lv.odom_topic_id, 1); 
-  typedef sync_policies::ApproximateTime<CameraMeasurement, nav_msgs::Odometry> MySyncPolicy;
-  Synchronizer<MySyncPolicy> sync(MySyncPolicy(10000), feature_sub, odom_sub);
+  typedef message_filters::sync_policies::ApproximateTime<CameraMeasurement, nav_msgs::Odometry> MySyncPolicy;
+  message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(10000), feature_sub, odom_sub);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
   // Loop, pumping all callbacks (specified in subscriber object)
