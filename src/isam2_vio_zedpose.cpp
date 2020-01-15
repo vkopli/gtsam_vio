@@ -83,7 +83,7 @@ private:
   std::shared_ptr<ros::NodeHandle> nh_ptr;
   
   // Publishers
-  ros::Publisher feature_cloud_world_pub; 
+  ros::Publisher feature_cloud_pub; 
   tf::TransformBroadcaster tf_pub;
 
   // Create iSAM2 object
@@ -125,7 +125,8 @@ public:
     nh_ptr->getParam("world_frame_id", lv.world_frame_id);
  
     // initialize PointCloud publisher
-    this->feature_cloud_world_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_world", 1000);
+    this->feature_cloud_pub = nh_ptr->advertise< 
+      pcl::PointCloud<pcl::PointXYZ> >("isam2_feature_point_cloud_world", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
     std::vector<double> cam0_intrinsics(4);
@@ -193,23 +194,17 @@ public:
     std::vector<FeatureMeasurement> feature_vector = camera_msg->features; 
     
     // Create object to publish PointCloud estimates of features in this pose
-    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
-      Point3 world_point = processFeature(feature_vector[i], prev_camera_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr);
+      Point3 world_point = processFeature(feature_vector[i], prev_camera_pose, feature_cloud_msg_ptr);
     }
     
-    // Publish feature PointCloud messages
-    feature_cloud_world_msg_ptr->header.frame_id = lv.world_frame_id;
-    feature_cloud_world_msg_ptr->height = 1;
-    feature_cloud_world_msg_ptr->width = feature_cloud_world_msg_ptr->points.size();
-    this->feature_cloud_world_pub.publish(feature_cloud_world_msg_ptr); 
-    
-    // Print info about this pose to console
-    Eigen::Matrix<double,4,1> centroid;
-    pcl::compute3DCentroid(*feature_cloud_camera_msg_ptr, centroid); // find centroid position of PointCloud
-//    ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", pose_id, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
+    // Publish feature PointCloud message (in world frame)
+    feature_cloud_msg_ptr->header.frame_id = lv.world_frame_id;
+    feature_cloud_msg_ptr->height = 1;
+    feature_cloud_msg_ptr->width = feature_cloud_msg_ptr->points.size();
+    this->feature_cloud_pub.publish(feature_cloud_msg_ptr); 
           
     if (pose_id == 0) {
 
@@ -278,8 +273,7 @@ public:
   // Add world coordinate of feature to PointCloud (estimated from previous pose)
   Point3 processFeature(FeatureMeasurement feature, 
                         Pose3 prev_camera_pose,
-                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr,
-                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr) {
+                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_msg_ptr) {
 
     Point3 world_point;
 
@@ -310,14 +304,12 @@ public:
       return world_point;
     }
     
-    // Add location in camera and world frame to PointCloud
-    pcl::PointXYZ pcl_camera_point = pcl::PointXYZ(camera_point.x(), camera_point.y(), camera_point.z());
-    feature_cloud_camera_msg_ptr->points.push_back(pcl_camera_point);   
-    pcl::PointXYZ pcl_world_point = pcl::PointXYZ(world_point.x(), world_point.y(), world_point.z());
-    feature_cloud_world_msg_ptr->points.push_back(pcl_world_point);  
+    // Add feature to PointCloud (in world frame)
+    pcl::PointXYZ pcl_point = pcl::PointXYZ(world_point.x(), world_point.y(), world_point.z());
+    feature_cloud_msg_ptr->points.push_back(pcl_point);  
 
-	// Add node value for feature/landmark if it doesn't already exist
-	bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
+	  // Add node value for feature/landmark if it doesn't already exist
+	  bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
       newNodes.insert(landmark, world_point);
     }
