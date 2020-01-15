@@ -10,6 +10,7 @@
   <arg name="camera_left_topic_id" default="/zed/zed_node/left/image_rect_color"/>
   <arg name="camera_right_topic_id" default="/zed/zed_node/right/image_rect_color"/>
   <arg name="imu_topic_id" default="/zed/zed_node/imu/data"/>
+  <arg name="world_frame_id" value="world"/>
   
   <!-- ISAM2 Parameters -->
   <rosparam command="load" file="$(arg calibration_file)"/>
@@ -18,11 +19,11 @@
   <param name="odom_topic_id" value="/zed/zed_node/odom"/>
   <param name="camera_frame_id" value="zed_left_camera_optical_frame"/>
   <param name="robot_frame_id" value="robot"/>
-  <param name="world_frame_id" value="world"/>
+  <param name="world_frame_id" value="$(arg world_frame_id)"/>
   
   <group ns="$(arg robot)">
     
-    <!-- Image Processor Nodelet  -->
+    <!-- Image Processor Nodelet -->
     <!--  (NOTE: to print output, include output="screen" command)  -->
     <node pkg="nodelet" type="nodelet" name="image_processor"
       args="standalone legged_vio/ImageProcessorNodelet"> <!--output="screen"-->
@@ -58,10 +59,13 @@
     
   </group>
   
-  <!-- ISAM2 Node  -->
+  <!-- ISAM2 Node -->
   <!--  (NOTE: to print output, include output="screen" command)  -->
   <node pkg="legged_vio" name="isam2" type="isam2" 
     required="true" output="screen"/>
+  
+  <!-- Publish static transform between world and odom to visualized odom message from camera -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="odom_broadcaster" args="0 0 0 3.1415926535 0 0 world odom" />
 
 </launch>
 

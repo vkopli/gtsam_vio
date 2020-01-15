@@ -12,6 +12,11 @@ Panels:
         - /TF1/Frames1
         - /TF1/Tree1
         - /PointCloud21
+        - /Odometry1
+        - /Odometry1/Shape1
+        - /Odometry1/Covariance1
+        - /Odometry1/Covariance1/Position1
+        - /Odometry1/Covariance1/Orientation1
       Splitter Ratio: 0.5
     Tree Height: 500
   - Class: rviz/Selection
@@ -70,6 +75,8 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
+        odom:
+          Value: true
         world:
           Value: true
         zed_left_camera_optical_frame:
@@ -81,6 +88,8 @@ Visualization Manager:
       Show Names: true
       Tree:
         world:
+          odom:
+            {}
           zed_left_camera_optical_frame:
             {}
       Update Interval: 0
@@ -127,6 +136,40 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: false
       Value: true
+    - Angle Tolerance: 0.10000000149011612
+      Class: rviz/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 252; 233; 79
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.5
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Keep: 100
+      Name: Odometry
+      Position Tolerance: 0.10000000149011612
+      Shape:
+        Alpha: 1
+        Axes Length: 0.30000001192092896
+        Axes Radius: 0.009999999776482582
+        Color: 255; 25; 0
+        Head Length: 0.30000001192092896
+        Head Radius: 0.10000000149011612
+        Shaft Length: 1
+        Shaft Radius: 0.05000000074505806
+        Value: Axes
+      Topic: /zed/zed_node/odom
+      Unreliable: true
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 238; 238; 236
@@ -149,7 +192,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 21.83162498474121
+      Distance: 18.90479850769043
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
