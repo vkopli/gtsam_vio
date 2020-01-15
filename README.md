@@ -15,13 +15,13 @@ change "isam2_node" variable in CMakeLists.txt to one of the below (e.g. "isam2_
 - isam2_imu - run ISAM2 for ZED IMU alone (bad performance)
 -------------------------------------------------------
 To change frame and camera topic specifications:
-- change "ISAM2 Variables" and "ISAM2 Parameters" at the top of isam2_minotaur_zed.launch
+- change "ISAM2 Variables" and "ISAM2 Parameters" at the top of isam2_minitaur_zed.launch
 -------------------------------------------------------
 
 ## Instructions to Run 
 -------------------------------------------------------
 Run launch file:
-- roslaunch legged_vio isam2_minotaur_zed.launch
+- roslaunch legged_vio isam2_minitaur_zed.launch
 -------------------------------------------------------
 For launch file to work, the following topics should be publishing messages:
 - /zed/zed_node/left/image_rect_color/compressed
