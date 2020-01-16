@@ -114,10 +114,10 @@ private:
   gtsam::Matrix4 T_cam_imu_mat; // T^imu_camera (camera pose in IMU frame)
   
   // Noise models
-  noiseModel::Diagonal::shared_ptr prior_pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.10),Vector3::Constant(0.05)).finished()); // 10cm std on x,y,z 0.05 rad on roll,pitch,yaw 
-  noiseModel::Isotropic::shared_ptr prior_landmark_noise = noiseModel::Isotropic::Sigma(3, 50); // 50m std on x,y,z
-  noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.10),Vector3::Constant(0.10)).finished()); // 10cm std on x,y,z 0.1 rad on roll,pitch,yaw 
-  noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 1); // 1 pixel std in u and v
+  noiseModel::Diagonal::shared_ptr prior_pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.01),Vector3::Constant(0.01)).finished()); // 10cm std on x,y,z 0.05 rad on roll,pitch,yaw 
+  noiseModel::Isotropic::shared_ptr prior_landmark_noise = noiseModel::Isotropic::Sigma(3, 500); // 50m std on x,y,z
+  noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.01),Vector3::Constant(0.01)).finished()); // 10cm std on x,y,z 0.1 rad on roll,pitch,yaw 
+  noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 500); // 1 pixel std in u and v
 
 public:
 
