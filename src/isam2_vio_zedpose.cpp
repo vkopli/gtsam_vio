@@ -99,24 +99,25 @@ private:
   // Initialize factor graph and values estimates on nodes (continually updated by isam.update()) 
   NonlinearFactorGraph graph;
   Values newNodes;
-  Values optimizedNodes;       // current estimate of values
+  Values optimizedNodes;        // current estimate of values
   Pose3 prev_camera_pose;       // current estimate of previous pose
   Pose3 prev_camera_odom;       // previous pose outputted by ZED camera
     
   // Initialize VIO Variables
-  double f;                    // Camera calibration intrinsics
+  double f;                     // Camera calibration intrinsics
   double cx;
   double cy;
-  double resolution_x;         // Image distortion intrinsics
+  double resolution_x;          // Image distortion intrinsics
   double resolution_y;
-  Cal3_S2Stereo::shared_ptr K; // Camera calibration intrinsic matrix
-  double Tx;                   // Camera calibration extrinsic: distance from cam0 to cam1  
-  gtsam::Matrix4 T_cam_imu_mat; // Transform to get to camera IMU frame from camera frame 
+  Cal3_S2Stereo::shared_ptr K;  // Camera calibration intrinsic matrix
+  double Tx;                    // Camera calibration extrinsic: distance from cam0 to cam1  
+  gtsam::Matrix4 T_cam_imu_mat; // T^imu_camera (camera pose in IMU frame)
   
   // Noise models
-  noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
-  noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 10.0); // one pixel in u and v
-  noiseModel::Isotropic::shared_ptr landmark_noise = noiseModel::Isotropic::Sigma(3, 0.1);
+  noiseModel::Diagonal::shared_ptr prior_pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.10),Vector3::Constant(0.05)).finished()); // 10cm std on x,y,z 0.05 rad on roll,pitch,yaw 
+  noiseModel::Isotropic::shared_ptr prior_landmark_noise = noiseModel::Isotropic::Sigma(3, 50); // 50m std on x,y,z
+  noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.10),Vector3::Constant(0.10)).finished()); // 10cm std on x,y,z 0.1 rad on roll,pitch,yaw 
+  noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 1); // 1 pixel std in u and v
 
 public:
 
@@ -179,17 +180,21 @@ public:
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
 
-    // Get ZED odometry message and transform to Pose3
+    // Get IMU pose (in world frame)
     boost::array<double, 36> orient_cov = odom_msg->pose.covariance; // 9 for each: (x,y,z), rotation about x, rotation about y, rotation about z
     geometry_msgs::Pose pose_msg = odom_msg->pose.pose; 
     geometry_msgs::Quaternion orient = pose_msg.orientation; // fields: x, y, z, w
     geometry_msgs::Point pos = pose_msg.position;            // fields: x, y, z
-    Pose3 curr_camera_odom = Pose3(Rot3::Quaternion(orient.x, orient.y, orient.z, orient.w), 
-        Vector3(pos.x, pos.y, pos.z)) * Pose3(T_cam_imu_mat); 
+    Pose3 curr_imu_odom = Pose3(Rot3::Quaternion(orient.w, orient.x, orient.y, orient.z), 
+      Vector3(pos.x, pos.y, pos.z));
+    ROS_INFO("frame %d, IMU position: (%f, %f, %f)", pose_id, pos.x, pos.y, pos.z);
+    
+    // Transform IMU pose to camera pose (in world frame): T^world_imu * T^imu_camera
+    Pose3 curr_camera_odom = curr_imu_odom * Pose3(T_cam_imu_mat);
+        
     if (pose_id == 0) {
       prev_camera_odom = curr_camera_odom;
     }                        
-    ROS_INFO("frame %d, ZED position: (%f, %f, %f)", pose_id, pos.x, pos.y, pos.z);
 
     // Add node value for current pose with initial estimate being previous pose
     if (pose_id == 0 || pose_id == 1) {
@@ -217,7 +222,7 @@ public:
     if (pose_id == 0) {
 
       // Add prior on pose x0 (zero pose is used to set world frame)
-      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), curr_camera_odom, pose_noise);
+      graph.emplace_shared<PriorFactor<Pose3> >(Symbol('x', 0), curr_camera_odom, prior_pose_noise);
 
       // Indicate that all node values seen in pose 0 have been seen for next iteration 
       optimizedNodes = newNodes; 
@@ -272,9 +277,9 @@ public:
     tf::Vector3 t_tf;
     tf::quaternionEigenToTF(camera_pose.rotation().toQuaternion(), q_tf);
     tf::vectorEigenToTF(camera_pose.translation().vector(), t_tf);
-    tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
+    tf::Transform world_to_camera_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
-          world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id));
+      world_to_camera_tf, timestamp, lv.world_frame_id, lv.camera_frame_id));
   }
 
   // Transform feature from image_processor to landmark with 3D coordinates
@@ -332,7 +337,7 @@ public:
         
     // Removing this causes greater accuracy but earlier gtsam::IndeterminantLinearSystemException)
     // Add prior to the landmark as well 
-    graph.emplace_shared<PriorFactor<Point3> >(landmark, world_point, landmark_noise);
+    graph.emplace_shared<PriorFactor<Point3> >(landmark, world_point, prior_landmark_noise);
   }
   
   RGBColor getLandmarkColor(int id) {
