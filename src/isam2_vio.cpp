@@ -72,6 +72,12 @@ struct LaunchVariables {
   string camera_frame_id;
 };
 
+struct RGBColor {
+  int r;
+  int g;
+  int b;
+};
+
 // CALLBACK WRAPPER CLASS
 /* ************************************************************************* */
 
@@ -147,10 +153,10 @@ public:
     vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
-//    vector<double> T_cam_imu(16);
-//    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
-//    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
-//    T_cam_imu_mat = move(T_cam_imu_mat_copy);
+    vector<double> T_cam_imu(16);
+    nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
+    gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
+    T_cam_imu_mat = move(T_cam_imu_mat_copy);
     
     // Set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
@@ -168,15 +174,15 @@ public:
     ROS_INFO("cam0/intrinsics exists? %d", nh_ptr->hasParam("cam0/intrinsics")); 
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
       cam0_intrinsics[2], cam0_intrinsics[3]);
-//    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
-//    cout << "transform from camera to imu: " << endl << T_cam_imu_mat << endl;
+    ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
+    cout << "transform from camera to imu: " << endl << T_cam_imu_mat << endl;
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
 
     // Add node value for current pose with initial estimate being previous pose
     if (pose_id == 0 || pose_id == 1) {
-      prev_camera_pose = Pose3();
+      prev_camera_pose = Pose3() * Pose3(T_cam_imu_mat);
     } 
     newNodes.insert(Symbol('x', pose_id), prev_camera_pose);
 
@@ -185,7 +191,7 @@ public:
     
     // Create object to publish PointCloud estimates of features in this pose
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr feature_cloud_world_msg_ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
     
     for (int i = 0; i < feature_vector.size(); i++) { 
       Point3 world_point = processFeature(feature_vector[i], prev_camera_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr);
@@ -266,7 +272,7 @@ public:
   Point3 processFeature(FeatureMeasurement feature, 
                         Pose3 prev_camera_pose,
                         pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr,
-                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr) {
+                        pcl::PointCloud<pcl::PointXYZRGB>::Ptr feature_cloud_world_msg_ptr) {
 
     Point3 world_point;
 
@@ -299,12 +305,16 @@ public:
     
     // Add location in camera and world frame to PointCloud
     pcl::PointXYZ pcl_camera_point = pcl::PointXYZ(camera_point.x(), camera_point.y(), camera_point.z());
-    feature_cloud_camera_msg_ptr->points.push_back(pcl_camera_point);   
-    pcl::PointXYZ pcl_world_point = pcl::PointXYZ(world_point.x(), world_point.y(), world_point.z());
+    feature_cloud_camera_msg_ptr->points.push_back(pcl_camera_point);  
+    RGBColor rgb = getLandmarkColor(landmark_id);
+    pcl::PointXYZRGB pcl_world_point = pcl::PointXYZRGB(rgb.r, rgb.g, rgb.b);
+    pcl_world_point.x = world_point.x();
+    pcl_world_point.y = world_point.y();
+    pcl_world_point.z = world_point.z(); 
     feature_cloud_world_msg_ptr->points.push_back(pcl_world_point);  
 
-	// Add node value for feature/landmark if it doesn't already exist
-	bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
+	  // Add node value for feature/landmark if it doesn't already exist
+	  bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
     if (new_landmark) {
       newNodes.insert(landmark, world_point);
     }
@@ -319,6 +329,19 @@ public:
         
     return world_point;
   } 
+  
+  RGBColor getLandmarkColor(int id) {
+    double center = 128;
+    double width = 127;
+    double r_freq = 1.666;
+    double g_freq = 2.666;
+    double b_freq = 3.666;
+    RGBColor rgb;
+    rgb.r = std::sin(r_freq * (double) id) * width + center;
+    rgb.g = std::sin(g_freq * (double) id) * width + center;
+    rgb.b = std::sin(b_freq * (double) id) * width + center;
+    return rgb;
+  }
 
 };
 
