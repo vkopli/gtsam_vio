@@ -15,7 +15,6 @@
 #include <tf/transform_broadcaster.h> 
 #include <tf_conversions/tf_eigen.h> 
 
-#include <sensor_msgs/PointCloud2.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/common/centroid.h>
@@ -54,10 +53,7 @@
 #include <map>
 #include <opencv2/opencv.hpp>
 
-using namespace std;
-using namespace message_filters;
 using namespace legged_vio;
-using namespace sensor_msgs;
 using namespace gtsam;
 
 // PARAMETERS TO SPECIFY FOR OTHER NODES
@@ -65,11 +61,11 @@ using namespace gtsam;
 
 // topics and frame names being subscribed from or published to
 struct LaunchVariables {
-  string feature_topic_id;
-  string odom_topic_id; 
-  string world_frame_id;
-  string robot_frame_id;
-  string camera_frame_id;
+  std::string feature_topic_id;
+  std::string odom_topic_id; 
+  std::string world_frame_id;
+  std::string robot_frame_id;
+  std::string camera_frame_id;
 };
 
 struct RGBColor {
@@ -88,15 +84,14 @@ private:
   int pose_id = 0;
 
   // Hold ROS node handle initialized in main
-  shared_ptr<ros::NodeHandle> nh_ptr;
+  std::shared_ptr<ros::NodeHandle> nh_ptr;
   
-  // Publishers
-  ros::Publisher feature_cloud_camera_pub; 
-  ros::Publisher feature_cloud_world_pub; 
+  // Publishers 
+  ros::Publisher landmark_cloud_pub; 
   tf::TransformBroadcaster tf_pub;
 
   // Create iSAM2 object
-  unique_ptr<ISAM2> isam;
+  std::unique_ptr<ISAM2> isam;
 
   // Initialize factor graph and values estimates on nodes (continually updated by isam.update()) 
   NonlinearFactorGraph graph;
@@ -115,15 +110,15 @@ private:
   gtsam::Matrix4 T_cam_imu_mat; // Transform to get from camera frame to camera IMU frame
   
   // Noise models
+  noiseModel::Isotropic::shared_ptr prior_landmark_noise = noiseModel::Isotropic::Sigma(3, 0.1);
   noiseModel::Diagonal::shared_ptr pose_noise = noiseModel::Diagonal::Sigmas((Vector(6) << Vector3::Constant(0.3),Vector3::Constant(0.1)).finished()); // 30cm std on x,y,z 0.1 rad on roll,pitch,yaw 
   noiseModel::Isotropic::shared_ptr pose_landmark_noise = noiseModel::Isotropic::Sigma(3, 10.0); // one pixel in u and v
-  noiseModel::Isotropic::shared_ptr landmark_noise = noiseModel::Isotropic::Sigma(3, 0.1);
 
 public:
 
   LaunchVariables lv;
  
-  Callbacks(shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(move(nh_ptr_copy)) {
+  Callbacks(std::shared_ptr<ros::NodeHandle> nh_ptr_copy) : nh_ptr(std::move(nh_ptr_copy)) {
  
     // load topic and frame names
     nh_ptr->getParam("feature_topic_id", lv.feature_topic_id);
@@ -133,30 +128,30 @@ public:
     nh_ptr->getParam("world_frame_id", lv.world_frame_id);
  
     // initialize PointCloud publisher
-    this->feature_cloud_camera_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_camera", 1000);
-    this->feature_cloud_world_pub = nh_ptr->advertise<sensor_msgs::PointCloud2>("isam2_feature_point_cloud_world", 1000);
+    this->landmark_cloud_pub = nh_ptr->advertise< 
+      pcl::PointCloud<pcl::PointXYZRGB> >("isam2_landmark_point_cloud", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
-    vector<double> cam0_intrinsics(4);
+    std::vector<double> cam0_intrinsics(4);
     nh_ptr->getParam("cam0/intrinsics", cam0_intrinsics); // <- neglect right camera 
     this->f = (cam0_intrinsics[0] + cam0_intrinsics[1]) / 2;
     this->cx = cam0_intrinsics[2];  
     this->cy = cam0_intrinsics[3];
     
     // YAML image resolution parameters (radtan): [k1 k2 r1 r2]
-    vector<double> cam0_resolution(2);
+    std::vector<double> cam0_resolution(2);
     nh_ptr->getParam("cam0/resolution", cam0_resolution); // <- neglect right camera
     this->resolution_x =  cam0_resolution[0];
     this->resolution_y =  cam0_resolution[1];
     
     // YAML extrinsics (distance between 2 cameras and transform between imu and camera)
-    vector<double> T_cam1(16);
+    std::vector<double> T_cam1(16);
     nh_ptr->getParam("cam1/T_cn_cnm1", T_cam1);
     this->Tx = T_cam1[3];
-    vector<double> T_cam_imu(16);
+    std::vector<double> T_cam_imu(16);
     nh_ptr->getParam("cam0/T_cam_imu", T_cam_imu);
     gtsam::Matrix4 T_cam_imu_mat_copy(T_cam_imu.data());
-    T_cam_imu_mat = move(T_cam_imu_mat_copy);
+    T_cam_imu_mat = std::move(T_cam_imu_mat_copy);
     
     // Set K: (fx, fy, s, u0, v0, b) (b: baseline where Z = f*d/b; Tx is negative) 
     this->K.reset(new Cal3_S2Stereo(cam0_intrinsics[0], cam0_intrinsics[1], 0.0, 
@@ -175,7 +170,7 @@ public:
     ROS_INFO("intrinsics: %f, %f, %f, %f", cam0_intrinsics[0], cam0_intrinsics[1], 
       cam0_intrinsics[2], cam0_intrinsics[3]);
     ROS_INFO("cam0/T_cam_imu exists? %d", nh_ptr->hasParam("cam0/T_cam_imu"));
-    cout << "transform from camera to imu: " << endl << T_cam_imu_mat << endl;
+    std::cout << "transform from camera to imu: " << std::endl << T_cam_imu_mat << std::endl;
   }
 
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
@@ -187,30 +182,24 @@ public:
     newNodes.insert(Symbol('x', pose_id), prev_camera_pose);
 
     // Use ImageProcessor to retrieve subscribed features ids and (u,v) image locations for this pose
-    vector<FeatureMeasurement> feature_vector = camera_msg->features; 
+    std::vector<FeatureMeasurement> feature_vector = camera_msg->features; 
+               
+    // Print info about this pose to console
+    ROS_INFO("frame %d, %lu total features, camera position: (%f, %f, %f)", pose_id, feature_vector.size(), prev_camera_pose.x(), prev_camera_pose.y(), prev_camera_pose.z());
     
-    // Create object to publish PointCloud estimates of features in this pose
-    pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr feature_cloud_world_msg_ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
+    // Create object to publish PointCloud of landmarks
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr landmark_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
     
+    // Convert features from image_processor to landmarks with 3D coordinates and add to ISAM2 graph/point cloud
     for (int i = 0; i < feature_vector.size(); i++) { 
-      Point3 world_point = processFeature(feature_vector[i], prev_camera_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr);
+      featureToLandmark(feature_vector[i], prev_camera_pose, landmark_cloud_msg_ptr);
     }
     
-    // Publish feature PointCloud messages
-    feature_cloud_camera_msg_ptr->header.frame_id = lv.camera_frame_id;
-    feature_cloud_camera_msg_ptr->height = 1;
-    feature_cloud_camera_msg_ptr->width = feature_cloud_camera_msg_ptr->points.size();
-    this->feature_cloud_camera_pub.publish(feature_cloud_camera_msg_ptr); 
-    feature_cloud_world_msg_ptr->header.frame_id = lv.world_frame_id;
-    feature_cloud_world_msg_ptr->height = 1;
-    feature_cloud_world_msg_ptr->width = feature_cloud_world_msg_ptr->points.size();
-    this->feature_cloud_world_pub.publish(feature_cloud_world_msg_ptr); 
-    
-    // Print info about this pose to console
-    Eigen::Matrix<double,4,1> centroid;
-    pcl::compute3DCentroid(*feature_cloud_camera_msg_ptr, centroid); // find centroid position of PointCloud
-    ROS_INFO("frame %d, %lu total features, centroid: (%f, %f, %f)", pose_id, feature_vector.size(), centroid[0], centroid[1], centroid[2]);
+    // Publish landmark PointCloud message (in world frame)
+    landmark_cloud_msg_ptr->header.frame_id = lv.world_frame_id;
+    landmark_cloud_msg_ptr->height = 1;
+    landmark_cloud_msg_ptr->width = landmark_cloud_msg_ptr->points.size();
+    this->landmark_cloud_pub.publish(landmark_cloud_msg_ptr); 
           
     if (pose_id == 0) {
 
@@ -222,16 +211,8 @@ public:
 
     } else {
     
-      // UPDATE ISAM WITH NEW FACTORS AND NODES FROM THIS POSE 
-      
+      // Update ISAM2 graph with new nodes and factors from this pose, optimize graphs
       isam->update(graph, newNodes); 
-      
-//      // Print graph to graphviz dot file (render to PDF using "fdp filname.dot -Tpdf > filename.pdf")
-//      if (pose_id == 1) {
-//        ofstream os("/home/vkopli/Documents/GRASP/Graphs/VisualISAMActualGraph_1pose_2019-09-18.dot");
-//        graph.saveGraph(os, newNodes);
-//        isam->saveGraph("/home/vkopli/Documents/GRASP/Graphs/VisualISAMGraph_1pose_2019-09-05.dot"); 
-//      }
 
       // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
       // If accuracy is desired at the expense of time, update(*) can be called additional times
@@ -241,6 +222,13 @@ public:
       // Update the node values that have been seen up to this point
       optimizedNodes = isam->calculateEstimate();
 //      optimizedNodes.print("Current estimate: ");
+
+//      // Print graph to graphviz dot file (render to PDF using "fdp filname.dot -Tpdf > filename.pdf")
+//      if (pose_id == 1) {
+//        ofstream os("/home/vkopli/Documents/GRASP/Graphs/VisualISAMActualGraph_1pose_2019-09-18.dot");
+//        graph.saveGraph(os, newNodes);
+//        isam->saveGraph("/home/vkopli/Documents/GRASP/Graphs/VisualISAMGraph_1pose_2019-09-05.dot"); 
+//      }
 
       // Clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
@@ -267,16 +255,14 @@ public:
       world_to_imu_tf, timestamp, lv.world_frame_id, lv.camera_frame_id)); 
   }
 
-  // Add node for feature if not already there and connect to current pose with a factor
-  // Add world coordinate of feature to PointCloud (estimated from previous pose)
-  Point3 processFeature(FeatureMeasurement feature, 
-                        Pose3 prev_camera_pose,
-                        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr,
-                        pcl::PointCloud<pcl::PointXYZRGB>::Ptr feature_cloud_world_msg_ptr) {
+  // Transform feature from image_processor to landmark with 3D coordinates
+  // Add landmark to ISAM2 graph if not already there (connect to current pose with a factor)
+  // Add landmark to point cloud 
+  void featureToLandmark(FeatureMeasurement feature, 
+                           Pose3 prev_camera_pose,
+                           pcl::PointCloud<pcl::PointXYZRGB>::Ptr landmark_cloud_msg_ptr) {
 
-    Point3 world_point;
-
-    // Identify feature (may appear in previous/future frames) and mark as "seen"
+    // Identify feature/landmark (may appear in previous/future frames) and mark as "seen"
     int landmark_id = feature.id;
     Symbol landmark = Symbol('l', landmark_id);
 
@@ -289,45 +275,42 @@ public:
     double y = v;
     double W = d / this->Tx;
 
-    // Estimated feature location in camera frame
+    // Estimate feature location in camera frame
     double X_camera = (x - cx) / W;
     double Y_camera = (y - cy) / W;
     double Z_camera = this->f / W; 
     Point3 camera_point = Point3(X_camera, Y_camera, Z_camera);
-    
-    // transform landmark coordinates to world frame
-    world_point = prev_camera_pose.transform_from(camera_point); 
-    
-    // if feature is behind camera, don't add to isam2 graph/feature messages
+        
+    // If landmark is behind camera, don't add to isam2 graph/point cloud
     if (camera_point[2] < 0) {
-      return world_point;
+      return;
     }
     
-    // Add location in camera and world frame to PointCloud
-    pcl::PointXYZ pcl_camera_point = pcl::PointXYZ(camera_point.x(), camera_point.y(), camera_point.z());
-    feature_cloud_camera_msg_ptr->points.push_back(pcl_camera_point);  
+    // Transform landmark coordinates to world frame 
+    Point3 world_point = prev_camera_pose.transform_from(camera_point); 
+    
+    // Add landmark to point cloud (in world frame)
     RGBColor rgb = getLandmarkColor(landmark_id);
     pcl::PointXYZRGB pcl_world_point = pcl::PointXYZRGB(rgb.r, rgb.g, rgb.b);
     pcl_world_point.x = world_point.x();
     pcl_world_point.y = world_point.y();
     pcl_world_point.z = world_point.z(); 
-    feature_cloud_world_msg_ptr->points.push_back(pcl_world_point);  
+    landmark_cloud_msg_ptr->points.push_back(pcl_world_point);  
 
-	  // Add node value for feature/landmark if it doesn't already exist
-	  bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
-    if (new_landmark) {
+	  // Add ISAM2 value for feature/landmark if it doesn't already exist
+	  bool bool_new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
+    if (bool_new_landmark) {
       newNodes.insert(landmark, world_point);
     }
     
-    // Add factor from this frame's pose to the feature/landmark
+    // Add ISAM2 factor connecting this frame's pose to the landmark
     graph.emplace_shared<
       GenericStereoFactor<Pose3, Point3> >(StereoPoint2(uL, uR, v), 
         pose_landmark_noise, Symbol('x', pose_id), landmark, K);
         
+    // Removing this causes greater accuracy but earlier gtsam::IndeterminantLinearSystemException)
     // Add prior to the landmark as well    
-    graph.emplace_shared<PriorFactor<Point3> >(landmark, world_point, landmark_noise);
-        
-    return world_point;
+    graph.emplace_shared<PriorFactor<Point3> >(landmark, world_point, prior_landmark_noise);
   } 
   
   RGBColor getLandmarkColor(int id) {
@@ -350,7 +333,7 @@ public:
 int main(int argc, char **argv) {
 
   ros::init(argc, argv, "isam2"); // specify name of node and ROS arguments
-  shared_ptr<ros::NodeHandle> nh_ptr = make_shared<ros::NodeHandle>();
+  std::shared_ptr<ros::NodeHandle> nh_ptr = std::make_shared<ros::NodeHandle>();
 
   // Instantiate class containing callbacks and necessary variables
   Callbacks callbacks_obj(nh_ptr);
@@ -359,8 +342,8 @@ int main(int argc, char **argv) {
   // Subscribe to "features" and "ZED odom" topics simultaneously
   message_filters::Subscriber<CameraMeasurement> feature_sub(*nh_ptr, lv.feature_topic_id, 1); 
   message_filters::Subscriber<nav_msgs::Odometry> odom_sub(*nh_ptr, lv.odom_topic_id, 1); 
-  typedef sync_policies::ApproximateTime<CameraMeasurement, nav_msgs::Odometry> MySyncPolicy;
-  Synchronizer<MySyncPolicy> sync(MySyncPolicy(10000), feature_sub, odom_sub);
+  typedef message_filters::sync_policies::ApproximateTime<CameraMeasurement, nav_msgs::Odometry> MySyncPolicy;
+  message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(10000), feature_sub, odom_sub);
   sync.registerCallback(boost::bind(&Callbacks::callback, &callbacks_obj, _1, _2));
 
   // Loop, pumping all callbacks (specified in subscriber object)

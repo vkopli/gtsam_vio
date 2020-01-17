@@ -134,7 +134,7 @@ public:
  
     // initialize PointCloud publisher
     this->landmark_cloud_pub = nh_ptr->advertise< 
-      pcl::PointCloud<pcl::PointXYZRGB> >("isam2_feature_point_cloud_world", 1000);
+      pcl::PointCloud<pcl::PointXYZRGB> >("isam2_landmark_point_cloud", 1000);
 
     // YAML intrinsics (pinhole): [fu fv pu pv]
     std::vector<double> cam0_intrinsics(4);
@@ -187,7 +187,7 @@ public:
     geometry_msgs::Point pos = pose_msg.position;            // fields: x, y, z
     Pose3 curr_imu_odom = Pose3(Rot3::Quaternion(orient.w, orient.x, orient.y, orient.z), 
       Vector3(pos.x, pos.y, pos.z));
-    ROS_INFO("frame %d, IMU position: (%f, %f, %f)", pose_id, pos.x, pos.y, pos.z);
+    ROS_INFO("frame %d, camera position: (%f, %f, %f)", pose_id, pos.x, pos.y, pos.z);
     
     // Transform IMU pose to camera pose (in world frame): T^world_imu * T^imu_camera
     Pose3 curr_camera_odom = curr_imu_odom * Pose3(T_cam_imu_mat);
@@ -237,25 +237,24 @@ public:
         pose_noise
       );
     
-      // UPDATE ISAM WITH NEW FACTORS AND NODES FROM THIS POSE 
-      
+      // Update ISAM2 graph with new nodes and factors from this pose, optimize graph
       isam->update(graph, newNodes); 
-      
-//      // Print graph to graphviz dot file (render to PDF using "fdp filname.dot -Tpdf > filename.pdf")
-//      if (pose_id == 1) {
-//        ofstream os("/home/vkopli/Documents/GRASP/Graphs/VisualISAMActualGraph_1pose_2019-09-18.dot");
-//        graph.saveGraph(os, newNodes);
-//        isam->saveGraph("/home/vkopli/Documents/GRASP/Graphs/VisualISAMGraph_1pose_2019-09-05.dot"); 
-//      }
 
       // Each call to iSAM2 update(*) performs one iteration of the iterative nonlinear solver.
       // If accuracy is desired at the expense of time, update(*) can be called additional times
       // to perform multiple optimizer iterations every step.
 //      isam->update();
 
-      // Update the node values that have been seen up to this point
+      // Update the collection of node values that have been seen up to this point
       optimizedNodes = isam->calculateEstimate();
 //      optimizedNodes.print("Current estimate: ");
+
+//      // Print graph to graphviz dot file (render to PDF using "fdp filname.dot -Tpdf > filename.pdf")
+//      if (pose_id == 1) {
+//        ofstream os("/home/vkopli/Documents/GRASP/Graphs/VisualISAMActualGraph_1pose_2019-09-18.dot");
+//        graph.saveGraph(os, newNodes);
+//        isam->saveGraph("/home/vkopli/Documents/GRASP/Graphs/VisualISAMGraph_1pose_2019-09-05.dot"); 
+//      }
 
       // Clear the objects holding new factors and node values for the next iteration
       graph.resize(0);
@@ -302,7 +301,7 @@ public:
     double y = v;
     double W = d / this->Tx;
 
-    // Estimated landmark location in camera frame
+    // Estimate landmark location in camera frame
     double X_camera = (x - cx) / W;
     double Y_camera = (y - cy) / W;
     double Z_camera = this->f / W; 
@@ -325,8 +324,8 @@ public:
     feature_cloud_msg_ptr->points.push_back(pcl_point);  
 
 	  // Add ISAM2 value for feature/landmark if it doesn't already exist
-	  bool new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
-    if (new_landmark) {
+	  bool bool_new_landmark = !optimizedNodes.exists(Symbol('l', landmark_id));
+    if (bool_new_landmark) {
       newNodes.insert(landmark, world_point);
     }
     
