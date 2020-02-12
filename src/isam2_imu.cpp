@@ -250,7 +250,7 @@ public:
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
     tf::quaternionEigenToTF(robot_pose.rotation().toQuaternion(), q_tf);
-    tf::vectorEigenToTF(robot_pose.translation().vector(), t_tf);
+    tf::vectorEigenToTF(robot_pose.translation(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
           world_to_imu_tf, timestamp, lv.world_frame_id, lv.robot_frame_id));

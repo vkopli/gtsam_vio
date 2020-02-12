@@ -181,7 +181,7 @@ public:
   void callback(const CameraMeasurementConstPtr& camera_msg, const nav_msgs::OdometryConstPtr& odom_msg) {
 
     // Get IMU pose (in world frame)
-    boost::array<double, 36> orient_cov = odom_msg->pose.covariance; // 9 for each: (x,y,z), rotation about x, rotation about y, rotation about z
+//    boost::array<double, 36> orient_cov = odom_msg->pose.covariance; // 9 for each: (x,y,z), rotation about x, rotation about y, rotation about z
     geometry_msgs::Pose pose_msg = odom_msg->pose.pose; 
     geometry_msgs::Quaternion orient = pose_msg.orientation; // fields: x, y, z, w
     geometry_msgs::Point pos = pose_msg.position;            // fields: x, y, z
@@ -209,7 +209,7 @@ public:
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr landmark_cloud_msg_ptr(new pcl::PointCloud<pcl::PointXYZRGB>());
     
     // Convert features from image_processor to landmarks with 3D coordinates and add to ISAM2 graph/point cloud
-    for (int i = 0; i < feature_vector.size(); i++) { 
+    for (unsigned int i = 0; i < feature_vector.size(); i++) { 
       featureToLandmark(feature_vector[i], prev_camera_pose, landmark_cloud_msg_ptr);
     }
     
@@ -275,7 +275,7 @@ public:
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
     tf::quaternionEigenToTF(camera_pose.rotation().toQuaternion(), q_tf);
-    tf::vectorEigenToTF(camera_pose.translation().vector(), t_tf);
+    tf::vectorEigenToTF(camera_pose.translation(), t_tf);
     tf::Transform world_to_camera_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
       world_to_camera_tf, timestamp, lv.world_frame_id, lv.camera_frame_id));

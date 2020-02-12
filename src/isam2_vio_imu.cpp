@@ -199,7 +199,7 @@ public:
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_camera_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     pcl::PointCloud<pcl::PointXYZ>::Ptr feature_cloud_world_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
     
-    for (int i = 0; i < feature_vector.size(); i++) { 
+    for (unsigned int i = 0; i < feature_vector.size(); i++) { 
       Point3 world_point = processFeature(
         feature_vector[i], prev_robot_pose, feature_cloud_camera_msg_ptr, feature_cloud_world_msg_ptr
       );
@@ -318,7 +318,7 @@ public:
     tf::Quaternion q_tf;
     tf::Vector3 t_tf;
     tf::quaternionEigenToTF(robot_pose.rotation().toQuaternion(), q_tf);
-    tf::vectorEigenToTF(robot_pose.translation().vector(), t_tf);
+    tf::vectorEigenToTF(robot_pose.translation(), t_tf);
     tf::Transform world_to_imu_tf = tf::Transform(q_tf, t_tf);
     tf_pub.sendTransform(tf::StampedTransform(
           world_to_imu_tf, imu_timestamp, lv.world_frame_id, lv.robot_frame_id));
