@@ -1,4 +1,4 @@
-# State estimation for legged robots using GTSAM
+# SLAM for ZED Stereo Camera using ISAM2
 
 ## Preliminaries
 
@@ -37,5 +37,5 @@ The following topics may be helpful:
 
 ## Instructions to Visualize
 
-visualize estimated camera pose and 3D locations of features in world frame
+To visualize the estimated camera pose and 3D locations of features in the world frame, run the following command:
 - rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_features_config.rviz 
