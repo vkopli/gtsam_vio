@@ -35,7 +35,7 @@ To visualize the estimated camera pose and 3D locations of features in the world
 
 ## Instructions to Change Launch Specifications
 
-To change which isam2 implementation is being run:
+To change which iSAM2 implementation is being run:
 change the "isam2_node" definition in CMakeLists.txt to one of the below (e.g. "isam2_vio_zedpose")
 - isam2_vio_zedpose - run iSAM2 for combined CAMERA VIO and ZED ODOMETRY OUTPUT 
 - isam2_vio - run iSAM2 for CAMERA VIO alone
