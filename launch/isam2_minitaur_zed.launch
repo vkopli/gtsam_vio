@@ -1,18 +1,18 @@
 <launch>
 
-  <!-- ImageProcessorNodelet/ISAM2 Variables -->
+  <!-- ImageProcessorNodelet/iSAM2 Variables -->
   <arg name="robot" default="minitaur"/>
   <arg name="calibration_file"
     default="$(find gtsam_vio)/config/zed_imu_camera_altered.yaml"/>
 
-  <!-- ISAM2 Variables -->
+  <!-- iSAM2 Variables -->
   <arg name="images_compressed" default="true"/>
   <arg name="camera_left_topic_id" default="/zed/zed_node/left/image_rect_color"/>
   <arg name="camera_right_topic_id" default="/zed/zed_node/right/image_rect_color"/>
   <arg name="imu_topic_id" default="/zed/zed_node/imu/data"/>
   <arg name="world_frame_id" value="world"/>
   
-  <!-- ISAM2 Parameters -->
+  <!-- iSAM2 Parameters -->
   <rosparam command="load" file="$(arg calibration_file)"/>
   <param name="feature_topic_id" value="/minitaur/image_processor/features"/>
   <param name="imu_topic_id" value="$(arg imu_topic_id)"/>
