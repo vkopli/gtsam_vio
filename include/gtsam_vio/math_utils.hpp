@@ -5,13 +5,13 @@
  * All rights reserved.
  */
 
-#ifndef LEGGED_VIO_MATH_UTILS_HPP
-#define LEGGED_VIO_MATH_UTILS_HPP
+#ifndef GTSAM_VIO_MATH_UTILS_HPP
+#define GTSAM_VIO_MATH_UTILS_HPP
 
 #include <cmath>
 #include <Eigen/Dense>
 
-namespace legged {
+namespace gtsam_vio {
 
 /*
  *  @brief Create a skew-symmetric matrix from a 3-element vector.
@@ -158,6 +158,6 @@ inline Eigen::Vector4d rotationToQuaternion(
   return q;
 }
 
-} // end namespace legged_vio
+} // end namespace gtsam_vio
 
-#endif // LEGGED_VIO_MATH_UTILS_HPP
+#endif // GTSAM_VIO_MATH_UTILS_HPP

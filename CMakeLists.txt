@@ -23,8 +23,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# Set which node to build to execute ISAM2
+set(isam2_node "isam2_vio_zedpose")
+
 cmake_minimum_required(VERSION 2.8.12)
-project(legged_vio)
+project(gtsam_vio)
 
 add_compile_options(-std=c++11)
 
@@ -84,7 +87,7 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES image_processor
   CATKIN_DEPENDS
-    roscpp std_msgs tf nav_msgs sensor_msgs geometry_msgs
+    roscpp std_msgs tf nav_msgs sensor_msgs geometry_msgs nav_msgs
     eigen_conversions tf_conversions random_numbers message_runtime
     image_transport cv_bridge message_filters pcl_conversions
     pcl_ros std_srvs
@@ -131,10 +134,12 @@ target_link_libraries(image_processor_nodelet
   ${catkin_LIBRARIES}
 )
 
-# ISAM2
-add_executable(isam2 src/isam2.cpp)
-target_link_libraries(isam2 ${catkin_LIBRARIES})
-add_dependencies(isam2 gtsam_ros_generate_messages_cpp)
+# custom ISAM2 nodes
+
+# ISAM2 combined vision and zed pose node
+add_executable(isam2 src/${isam2_node}.cpp)
+target_link_libraries(isam2 ${catkin_LIBRARIES} gtsam)
+add_dependencies(isam2 gtsam_vio_generate_messages_cpp)
 
 #############
 ## Install ##

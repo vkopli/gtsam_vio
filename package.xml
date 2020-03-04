@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <package format="2">
 
-  <name>legged_vio</name>
+  <name>gtsam_vio</name>
   <version>0.0.1</version>
-  <description>Visual-Inertial State Estimation for legged robots with GTSAM</description>
+  <description>Visual-Inertial State Estimation using GTSAM</description>
 
   <maintainer email="vvasilo@seas.upenn.edu">Vasileios Vasilopoulos</maintainer>
 

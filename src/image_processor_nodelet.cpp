@@ -5,9 +5,9 @@
  * All rights reserved.
  */
 
-#include <legged_vio/image_processor_nodelet.h>
+#include <gtsam_vio/image_processor_nodelet.h>
 
-namespace legged_vio {
+namespace gtsam_vio {
 void ImageProcessorNodelet::onInit() {
   img_processor_ptr.reset(new ImageProcessor(getPrivateNodeHandle()));
   if (!img_processor_ptr->initialize()) {
@@ -17,7 +17,7 @@ void ImageProcessorNodelet::onInit() {
   return;
 }
 
-PLUGINLIB_EXPORT_CLASS(legged_vio::ImageProcessorNodelet, nodelet::Nodelet);
+PLUGINLIB_EXPORT_CLASS(gtsam_vio::ImageProcessorNodelet, nodelet::Nodelet);
 
-} // end namespace legged_vio
+} // end namespace gtsam_vio
 

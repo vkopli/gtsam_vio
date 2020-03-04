@@ -8,11 +8,11 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <gtest/gtest.h>
-#include <legged_vio/math_utils.hpp>
+#include <gtsam_vio/math_utils.hpp>
 
 using namespace std;
 using namespace Eigen;
-using namespace legged_vio;
+using namespace gtsam_vio;
 
 TEST(MathUtilsTest, skewSymmetric) {
   Vector3d w(1.0, 2.0, 3.0);

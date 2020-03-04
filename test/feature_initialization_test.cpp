@@ -16,13 +16,13 @@
 #include <gtest/gtest.h>
 #include <random_numbers/random_numbers.h>
 
-#include <legged_vio/cam_state.h>
-#include <legged_vio/feature.hpp>
+#include <gtsam_vio/cam_state.h>
+#include <gtsam_vio/feature.hpp>
 
 
 using namespace std;
 using namespace Eigen;
-using namespace legged_vio;
+using namespace gtsam_vio;
 
 // Static member variables in CAMState class
 Isometry3d CAMState::T_cam0_cam1 = Isometry3d::Identity();

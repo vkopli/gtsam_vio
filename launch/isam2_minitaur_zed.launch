@@ -1,0 +1,92 @@
+<launch>
+
+  <!-- ImageProcessorNodelet/ISAM2 Variables -->
+  <arg name="robot" default="minitaur"/>
+  <arg name="calibration_file"
+    default="$(find gtsam_vio)/config/zed_imu_camera_altered.yaml"/>
+
+  <!-- ISAM2 Variables -->
+  <arg name="images_compressed" default="true"/>
+  <arg name="camera_left_topic_id" default="/zed/zed_node/left/image_rect_color"/>
+  <arg name="camera_right_topic_id" default="/zed/zed_node/right/image_rect_color"/>
+  <arg name="imu_topic_id" default="/zed/zed_node/imu/data"/>
+  <arg name="world_frame_id" value="world"/>
+  
+  <!-- ISAM2 Parameters -->
+  <rosparam command="load" file="$(arg calibration_file)"/>
+  <param name="feature_topic_id" value="/minitaur/image_processor/features"/>
+  <param name="imu_topic_id" value="$(arg imu_topic_id)"/>
+  <param name="odom_topic_id" value="/zed/zed_node/odom"/>
+  <param name="camera_frame_id" value="zed_left_camera_optical_frame"/>
+  <param name="robot_frame_id" value="robot"/>
+  <param name="world_frame_id" value="$(arg world_frame_id)"/>
+  
+  <group ns="$(arg robot)">
+    
+    <!-- Image Processor Nodelet -->
+    <!--  (NOTE: to print output, include output="screen" command)  -->
+    <node pkg="nodelet" type="nodelet" name="image_processor"
+      args="standalone gtsam_vio/ImageProcessorNodelet"> <!--output="screen"-->
+      
+      <rosparam command="load" file="$(arg calibration_file)"/>
+      <param name="grid_row" value="3"/>
+      <param name="grid_col" value="4"/>
+      <param name="grid_min_feature_num" value="3"/>
+      <param name="grid_max_feature_num" value="4"/>
+      <param name="pyramid_levels" value="3"/>
+      <param name="patch_size" value="15"/>
+      <param name="fast_threshold" value="10"/>
+      <param name="max_iteration" value="30"/>
+      <param name="track_precision" value="0.01"/>
+      <param name="ransac_threshold" value="3"/>
+      <param name="stereo_threshold" value="5"/>
+
+      <!-- This nodelet subscribes to imu, cam0_image, and cam1_image topics -->
+      <!-- Remap to the topics that are published by zed camera: -->
+      <remap from="~imu" to="$(arg imu_topic_id)"/> 
+      <remap from="~cam0_image" to="$(arg camera_left_topic_id)"/>
+      <remap from="~cam1_image" to="$(arg camera_right_topic_id)"/>
+
+    </node>
+          
+    <!-- Uncompress images if compressed  -->
+    <node name="republish_left" type="republish" pkg="image_transport"
+      args="compressed in:=$(arg camera_left_topic_id) raw out:=$(arg camera_left_topic_id)" 
+      if ="$(eval arg('images_compressed'))"/>
+    <node name="republish_right" type="republish" pkg="image_transport"
+      args="compressed in:=$(arg camera_right_topic_id) raw out:=$(arg camera_right_topic_id)"
+      if ="$(eval arg('images_compressed'))"/>
+    
+  </group>
+  
+  <!-- ISAM2 Node -->
+  <!--  (NOTE: to print output, include output="screen" command)  -->
+  <node pkg="gtsam_vio" name="isam2" type="isam2" 
+    required="true" output="screen"/>
+  
+  <!-- Publish static transform between world and odom to visualized odom message from camera -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="odom_broadcaster" args="0 0 0 0 0 0 world odom" />
+
+</launch>
+
+<?ignore
+  <!-- START: unusued parameters intitially intended for isam2 -->
+  <!-- These values should be standard deviation -->
+  <param name="noise/gyro" value="0.005"/>
+  <param name="noise/acc" value="0.05"/>
+  <param name="noise/gyro_bias" value="0.001"/>
+  <param name="noise/acc_bias" value="0.01"/>
+  <param name="noise/feature" value="0.035"/>
+
+  <param name="initial_state/velocity/x" value="0.0"/>
+  <param name="initial_state/velocity/y" value="0.0"/>
+  <param name="initial_state/velocity/z" value="0.0"/>
+
+  <!-- These values should be covariance -->
+  <param name="initial_covariance/velocity" value="0.25"/>
+  <param name="initial_covariance/gyro_bias" value="0.01"/>
+  <param name="initial_covariance/acc_bias" value="0.01"/>
+  <param name="initial_covariance/extrinsic_rotation_cov" value="3.0462e-4"/>
+  <param name="initial_covariance/extrinsic_translation_cov" value="2.5e-5"/>
+  <!-- END: unusued parameters intitially intended for isam2 -->
+?>

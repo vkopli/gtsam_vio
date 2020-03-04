@@ -5,10 +5,10 @@
  * All rights reserved.
  */
 
-#include <legged_vio/utils.h>
+#include <gtsam_vio/utils.h>
 #include <vector>
 
-namespace legged_vio {
+namespace gtsam_vio {
 namespace utils {
 
 Eigen::Isometry3d getTransformEigen(const ros::NodeHandle &nh,
@@ -89,4 +89,4 @@ cv::Mat getKalibrStyleTransform(const ros::NodeHandle &nh,
 }
 
 } // namespace utils
-} // namespace legged_vio
+} // namespace gtsam_vio

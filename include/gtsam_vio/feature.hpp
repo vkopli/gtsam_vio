@@ -5,8 +5,8 @@
  * All rights reserved.
  */
 
-#ifndef LEGGED_VIO_FEATURE_H
-#define LEGGED_VIO_FEATURE_H
+#ifndef GTSAM_VIO_FEATURE_H
+#define GTSAM_VIO_FEATURE_H
 
 #include <iostream>
 #include <map>
@@ -20,7 +20,7 @@
 #include "imu_state.h"
 #include "cam_state.h"
 
-namespace legged_vio {
+namespace gtsam_vio {
 
 /*
  * @brief Feature Salient part of an image. Please refer
@@ -435,6 +435,6 @@ bool Feature::initializePosition(
 
   return is_valid_solution;
 }
-} // namespace legged_vio
+} // namespace gtsam_vio
 
-#endif // LEGGED_VIO_FEATURE_H
+#endif // GTSAM_VIO_FEATURE_H
