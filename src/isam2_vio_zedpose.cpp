@@ -10,7 +10,7 @@
 #include <message_filters/time_synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
 
-#include <legged_vio/CameraMeasurement.h>
+#include <gtsam_vio/CameraMeasurement.h>
 #include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h> 
 #include <tf_conversions/tf_eigen.h> 
@@ -56,7 +56,7 @@
 #include <memory>
 #include <opencv2/opencv.hpp>
 
-using namespace legged_vio;
+using namespace gtsam_vio;
 using namespace gtsam;
 
 // PARAMETERS TO SPECIFY FOR OTHER NODES

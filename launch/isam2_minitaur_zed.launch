@@ -3,7 +3,7 @@
   <!-- ImageProcessorNodelet/ISAM2 Variables -->
   <arg name="robot" default="minitaur"/>
   <arg name="calibration_file"
-    default="$(find legged_vio)/config/zed_imu_camera_altered.yaml"/>
+    default="$(find gtsam_vio)/config/zed_imu_camera_altered.yaml"/>
 
   <!-- ISAM2 Variables -->
   <arg name="images_compressed" default="true"/>
@@ -26,7 +26,7 @@
     <!-- Image Processor Nodelet -->
     <!--  (NOTE: to print output, include output="screen" command)  -->
     <node pkg="nodelet" type="nodelet" name="image_processor"
-      args="standalone legged_vio/ImageProcessorNodelet"> <!--output="screen"-->
+      args="standalone gtsam_vio/ImageProcessorNodelet"> <!--output="screen"-->
       
       <rosparam command="load" file="$(arg calibration_file)"/>
       <param name="grid_row" value="3"/>
@@ -61,7 +61,7 @@
   
   <!-- ISAM2 Node -->
   <!--  (NOTE: to print output, include output="screen" command)  -->
-  <node pkg="legged_vio" name="isam2" type="isam2" 
+  <node pkg="gtsam_vio" name="isam2" type="isam2" 
     required="true" output="screen"/>
   
   <!-- Publish static transform between world and odom to visualized odom message from camera -->

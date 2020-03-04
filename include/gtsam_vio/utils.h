@@ -5,17 +5,17 @@
  * All rights reserved.
  */
 
-#ifndef LEGGED_VIO_UTILS_H
-#define LEGGED_VIO_UTILS_H
+#ifndef GTSAM_VIO_UTILS_H
+#define GTSAM_VIO_UTILS_H
 
 #include <ros/ros.h>
 #include <string>
 #include <opencv2/core/core.hpp>
 #include <Eigen/Geometry>
 
-namespace legged_vio {
+namespace gtsam_vio {
 /*
- * @brief utilities for legged_vio
+ * @brief utilities for gtsam_vio
  */
 namespace utils {
 Eigen::Isometry3d getTransformEigen(const ros::NodeHandle &nh,

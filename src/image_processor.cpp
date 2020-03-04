@@ -13,16 +13,16 @@
 #include <sensor_msgs/image_encodings.h>
 #include <random_numbers/random_numbers.h>
 
-#include <legged_vio/CameraMeasurement.h>
-#include <legged_vio/TrackingInfo.h>
-#include <legged_vio/image_processor.h>
-#include <legged_vio/utils.h>
+#include <gtsam_vio/CameraMeasurement.h>
+#include <gtsam_vio/TrackingInfo.h>
+#include <gtsam_vio/image_processor.h>
+#include <gtsam_vio/utils.h>
 
 using namespace std;
 using namespace cv;
 using namespace Eigen;
 
-namespace legged_vio {
+namespace gtsam_vio {
 ImageProcessor::ImageProcessor(ros::NodeHandle& n) :
   nh(n),
   is_first_img(true),
@@ -1486,4 +1486,4 @@ void ImageProcessor::featureLifetimeStatistics() {
   return;
 }
 
-} // end namespace legged_vio
+} // end namespace gtsam_vio

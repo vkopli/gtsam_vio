@@ -5,8 +5,8 @@
  * All rights reserved.
  */
 
-#ifndef LEGGED_VIO_CAM_STATE_H
-#define LEGGED_VIO_CAM_STATE_H
+#ifndef GTSAM_VIO_CAM_STATE_H
+#define GTSAM_VIO_CAM_STATE_H
 
 #include <map>
 #include <vector>
@@ -14,7 +14,7 @@
 
 #include "imu_state.h"
 
-namespace legged_vio {
+namespace gtsam_vio {
 /*
  * @brief CAMState Stored camera state in order to
  *    form measurement model.
@@ -62,6 +62,6 @@ struct CAMState {
 typedef std::map<StateIDType, CAMState, std::less<int>,
         Eigen::aligned_allocator<
         std::pair<const StateIDType, CAMState> > > CamStateServer;
-} // namespace legged_vio
+} // namespace gtsam_vio
 
-#endif // LEGGED_VIO_CAM_STATE_H
+#endif // GTSAM_VIO_CAM_STATE_H

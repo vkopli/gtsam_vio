@@ -23,7 +23,7 @@ To change frame and camera topic specifications:
 ## Instructions to Run 
 
 Run launch file:
-- roslaunch legged_vio isam2_minitaur_zed.launch
+- roslaunch gtsam_vio isam2_minitaur_zed.launch
 
 For the launch file to work, the following topics should be publishing messages:
 - /zed/zed_node/left/image_rect_color/compressed
@@ -38,4 +38,4 @@ The following topics may be helpful:
 ## Instructions to Visualize
 
 To visualize the estimated camera pose and 3D locations of features in the world frame, run the following command:
-- rviz rviz -d ~/catkin_ws/src/legged_vio/rviz/rviz_tf_features_config.rviz 
+- rviz rviz -d ~/catkin_ws/src/gtsam_vio/rviz/rviz_tf_features_config.rviz 

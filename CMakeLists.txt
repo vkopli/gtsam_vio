@@ -27,7 +27,7 @@
 set(isam2_node "isam2_vio_zedpose")
 
 cmake_minimum_required(VERSION 2.8.12)
-project(legged_vio)
+project(gtsam_vio)
 
 add_compile_options(-std=c++11)
 
@@ -134,12 +134,12 @@ target_link_libraries(image_processor_nodelet
   ${catkin_LIBRARIES}
 )
 
-# custom ISAM2 nodes (TODO: move new launch params from image_processor_nodelet to new nodelet)
+# custom ISAM2 nodes
 
 # ISAM2 combined vision and zed pose node
 add_executable(isam2 src/${isam2_node}.cpp)
 target_link_libraries(isam2 ${catkin_LIBRARIES} gtsam)
-add_dependencies(isam2 legged_vio_generate_messages_cpp)
+add_dependencies(isam2 gtsam_vio_generate_messages_cpp)
 
 #############
 ## Install ##

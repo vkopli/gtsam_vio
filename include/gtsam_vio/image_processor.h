@@ -5,8 +5,8 @@
  * All rights reserved.
  */
 
-#ifndef LEGGED_VIO_IMAGE_PROCESSOR_H
-#define LEGGED_VIO_IMAGE_PROCESSOR_H
+#ifndef GTSAM_VIO_IMAGE_PROCESSOR_H
+#define GTSAM_VIO_IMAGE_PROCESSOR_H
 
 #include <vector>
 #include <map>
@@ -22,7 +22,7 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 
-namespace legged_vio {
+namespace gtsam_vio {
 
 /*
  * @brief ImageProcessor Detects and tracks features
@@ -393,6 +393,6 @@ private:
 typedef ImageProcessor::Ptr ImageProcessorPtr;
 typedef ImageProcessor::ConstPtr ImageProcessorConstPtr;
 
-} // end namespace legged_vio
+} // end namespace gtsam_vio
 
 #endif

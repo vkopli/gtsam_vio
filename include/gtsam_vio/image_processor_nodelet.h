@@ -10,9 +10,9 @@
 
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
-#include <legged_vio/image_processor.h>
+#include <gtsam_vio/image_processor.h>
 
-namespace legged_vio {
+namespace gtsam_vio {
 class ImageProcessorNodelet : public nodelet::Nodelet {
 public:
   ImageProcessorNodelet() { return; }
@@ -22,7 +22,7 @@ private:
   virtual void onInit();
   ImageProcessorPtr img_processor_ptr;
 };
-} // end namespace legged_vio
+} // end namespace gtsam_vio
 
 #endif
 
