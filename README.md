@@ -19,9 +19,9 @@ When building gtsam from source, use the following cmake flags: -DGTSAM_BUILD_EX
 ## Instructions to Run 
 
 Run launch file:
-- roslaunch gtsam_vio isam2_minitaur_zed.launch
+- roslaunch gtsam_vio isam2_turtlebot_zed.launch
 
-Run bag file (or your own ZED mini stereo camera):
+Run bag file (or use your own ZED mini stereo camera):
 - rosbag play turtlebot_zed_forward_back.bag
 
 Make sure the following topics are publishing messages:
@@ -45,4 +45,4 @@ change the "isam2_node" definition in CMakeLists.txt to one of the below (e.g. "
 - isam2_imu - run iSAM2 for RAW ZED IMU OUTPUT alone (bad performance)
 
 To change frame and camera topic specifications:
-- change "iSAM2 Variables" and "iSAM2 Parameters" at the top of isam2_minitaur_zed.launch
+- change "iSAM2 Variables" and "iSAM2 Parameters" at the top of isam2_turtlebot_zed.launch

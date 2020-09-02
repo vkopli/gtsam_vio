@@ -1,7 +1,7 @@
 <launch>
 
   <!-- ImageProcessorNodelet/iSAM2 Variables -->
-  <arg name="robot" default="minitaur"/>
+  <arg name="robot" default="turtlebot"/>
   <arg name="calibration_file"
     default="$(find gtsam_vio)/config/zed_imu_camera_altered.yaml"/>
 
@@ -14,11 +14,11 @@
   
   <!-- iSAM2 Parameters -->
   <rosparam command="load" file="$(arg calibration_file)"/>
-  <param name="feature_topic_id" value="/minitaur/image_processor/features"/>
+  <param name="feature_topic_id" value="/$(arg robot)/image_processor/features"/>
   <param name="imu_topic_id" value="$(arg imu_topic_id)"/>
   <param name="odom_topic_id" value="/zed/zed_node/odom"/>
   <param name="camera_frame_id" value="zed_left_camera_optical_frame"/>
-  <param name="robot_frame_id" value="robot"/>
+  <param name="robot_frame_id" value="$(arg robot)"/>
   <param name="world_frame_id" value="$(arg world_frame_id)"/>
   
   <group ns="$(arg robot)">
