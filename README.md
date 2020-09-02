@@ -5,8 +5,7 @@
 Presentation on (1) theoretical background of iSAM2 and (2) results on Turtlebot (videos at the end):
 - https://www.dropbox.com/s/m61mxbnu8e43lp5/ISAM2%20Presentation.pptx?dl=0
 
-Dataset used in presentation:
-- https://www.dropbox.com/sh/vku3rpquwpql0h0/AADmsJg6yzNQ7nIK3XmbF7iva?dl=0
+Dataset used in presentation: https://www.dropbox.com/sh/vku3rpquwpql0h0/AADmsJg6yzNQ7nIK3XmbF7iva?dl=0
 
 ## Preliminaries
 
@@ -21,7 +20,7 @@ When building gtsam from source, use the following cmake flags: -DGTSAM_BUILD_EX
 Run launch file:
 - roslaunch gtsam_vio isam2_turtlebot_zed.launch
 
-Run bag file (or use your own ZED mini stereo camera):
+Run bag file from dataset link above (or use your own ZED mini stereo camera):
 - rosbag play turtlebot_zed_forward_back.bag
 
 Make sure the following topics are publishing messages:
