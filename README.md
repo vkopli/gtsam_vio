@@ -5,7 +5,9 @@
 Presentation on (1) theoretical background of iSAM2 and (2) results on Turtlebot (videos at the end):
 - https://www.dropbox.com/s/m61mxbnu8e43lp5/ISAM2%20Presentation.pptx?dl=0
 
-Dataset used in presentation: https://www.dropbox.com/sh/vku3rpquwpql0h0/AADmsJg6yzNQ7nIK3XmbF7iva?dl=0
+Paper: https://www.dropbox.com/s/dka68k9i4uw187r/Master_s_Thesis.pdf?dl=0
+
+Dataset: https://www.dropbox.com/sh/vku3rpquwpql0h0/AADmsJg6yzNQ7nIK3XmbF7iva?dl=0
 
 ## Preliminaries
 
